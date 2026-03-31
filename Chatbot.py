@@ -246,9 +246,6 @@ SYSTEM_PROMPT = (
 
 # ── Gemini API call ──────────────────────────────────────────────────────────
 def ask(question: str) -> str:
-    if not API_KEY or len(API_KEY) < 20:
-        raise ValueError("API Key not configured")
-
     client = genai.Client(api_key=API_KEY)
     full_prompt = SYSTEM_PROMPT + f"\n\n--- USER QUESTION ---\n{question}\n\n--- ANSWER ---"
 
@@ -259,7 +256,7 @@ def ask(question: str) -> str:
     )
 
     if not resp or not resp.text:
-        raise ValueError("Gemini returned an empty response")
+        raise ValueError("Empty response from Gemini")
     return resp.text
 
 # ── Session state ────────────────────────────────────────────────────────────
