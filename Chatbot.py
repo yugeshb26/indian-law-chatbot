@@ -7,10 +7,16 @@ from datetime import datetime
 
 from db import init_db, create_chat, get_all_chats, get_chat, get_messages
 from db import append_message, update_chat_title, delete_chat
-from gemini_engine import stream_response, regenerate_response, generate_title
+from gemini_engine import stream_response, regenerate_response, generate_title, init_rotator
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-API_KEY = st.secrets["GEMINI_API_KEY"]
+# Supports multiple keys — rotates automatically when one is exhausted
+if "GEMINI_API_KEYS" in st.secrets:
+    API_KEYS = list(st.secrets["GEMINI_API_KEYS"])
+else:
+    API_KEYS = [st.secrets["GEMINI_API_KEY"]]
+rotator = init_rotator(API_KEYS)
+API_KEY = API_KEYS[0]  # backward compat (engine uses rotator internally)
 DATASET_PATH = "Alpie-core_core_indian_law.json"
 # ─────────────────────────────────────────────────────────────────────────────
 
