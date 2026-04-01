@@ -192,53 +192,64 @@ section[data-testid="stSidebar"] .stButton > button:hover {
     content: "▊"; animation: blink 0.8s infinite; color: #FF9933;
 }
 
-/* ── Sidebar toggle button (hamburger) — hidden on desktop ───── */
-.sidebar-toggle {
-    display: none;
-    position: fixed;
-    top: 12px;
-    left: 12px;
-    z-index: 1001;
-    background: linear-gradient(135deg, #1B1464, #0C2340);
-    color: white;
-    border: 2px solid rgba(255, 153, 51, 0.4);
-    border-radius: 12px;
-    width: 44px;
-    height: 44px;
-    font-size: 1.3rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    transition: all 0.2s;
-}
-.sidebar-toggle:hover {
-    background: linear-gradient(135deg, #FF9933, #E07C24);
-    border-color: #FF9933;
-    transform: scale(1.05);
+/* ── Thinking pulse animation ────────────────────────────────── */
+@keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+.bot-bubble span[style*="Thinking"] {
+    animation: pulse 1.2s ease-in-out infinite;
 }
 
-/* ── Sidebar overlay (dark backdrop on mobile) ───────────────── */
-.sidebar-overlay {
-    display: none;
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 998;
-    backdrop-filter: blur(2px);
-}
-
-/* ── Streamlit sidebar close button styling ──────────────────── */
-section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {
-    display: block !important;
+/* ── Sidebar open/close buttons — always visible and styled ──── */
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapseButton"],
+button[kind="headerNoPadding"] {
+    display: flex !important;
     visibility: visible !important;
+    opacity: 1 !important;
 }
+
+/* Style the expand button (shown when sidebar is closed) */
+[data-testid="stSidebarCollapsedControl"] {
+    position: fixed !important;
+    top: 10px !important;
+    left: 10px !important;
+    z-index: 1001 !important;
+}
+[data-testid="stSidebarCollapsedControl"] button {
+    background: linear-gradient(135deg, #1B1464, #0C2340) !important;
+    color: white !important;
+    border: 2px solid rgba(255, 153, 51, 0.4) !important;
+    border-radius: 12px !important;
+    width: 44px !important;
+    height: 44px !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.25) !important;
+    transition: all 0.2s !important;
+}
+[data-testid="stSidebarCollapsedControl"] button:hover {
+    background: linear-gradient(135deg, #FF9933, #E07C24) !important;
+    border-color: #FF9933 !important;
+}
+[data-testid="stSidebarCollapsedControl"] button svg {
+    fill: white !important;
+    stroke: white !important;
+}
+
+/* Style the collapse button inside sidebar (X to close) */
 section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button {
     background: rgba(255,255,255,0.1) !important;
-    border: 1px solid rgba(255,255,255,0.2) !important;
+    border: 1px solid rgba(255,255,255,0.25) !important;
     color: white !important;
-    border-radius: 8px !important;
+    border-radius: 10px !important;
+    width: 38px !important;
+    height: 38px !important;
+    transition: all 0.2s !important;
+}
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button:hover {
+    background: rgba(255, 153, 51, 0.3) !important;
+    border-color: #FF9933 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
+    fill: white !important;
+    stroke: white !important;
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -247,15 +258,8 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button 
 
 /* ── Mobile (up to 768px) ────────────────────────────────────── */
 @media (max-width: 768px) {
-    /* Show toggle button on mobile */
-    .sidebar-toggle { display: flex; }
-
-    /* Make sidebar overlay full screen on mobile */
+    /* Sidebar slides over content on mobile */
     section[data-testid="stSidebar"] {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        height: 100vh !important;
         min-width: 280px !important;
         max-width: 85vw !important;
         box-shadow: 4px 0 25px rgba(0,0,0,0.3) !important;
@@ -533,32 +537,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-# ── Mobile sidebar toggle button ─────────────────────────────────────────────
-st.markdown(
-    """
-    <button class="sidebar-toggle" onclick="
-        var sidebar = window.parent.document.querySelector('section[data-testid=stSidebar]');
-        var btn = window.parent.document.querySelector('[data-testid=stSidebarCollapse] button')
-                  || window.parent.document.querySelector('[data-testid=stSidebarCollapseButton] button');
-        if (btn) { btn.click(); }
-        else if (sidebar) {
-            var isHidden = sidebar.getAttribute('aria-expanded') === 'false'
-                          || sidebar.style.display === 'none'
-                          || sidebar.offsetWidth < 10;
-            if (isHidden) {
-                sidebar.style.display = 'block';
-                sidebar.style.transform = 'translateX(0)';
-                sidebar.setAttribute('aria-expanded', 'true');
-            } else {
-                sidebar.setAttribute('aria-expanded', 'false');
-                sidebar.style.transform = 'translateX(-100%)';
-            }
-        }
-    ">☰</button>
-    """,
-    unsafe_allow_html=True,
-)
-
 # ── Hero Banner (only when no messages) ──────────────────────────────────────
 if not st.session_state.messages:
     st.markdown(
@@ -603,21 +581,31 @@ active_prompt = prompt or pending
 
 def stream_and_display(messages_for_api: list[dict]) -> str:
     """Stream Gemini response with live display, return full text."""
+    # Show loading indicator immediately
+    loading = st.empty()
+    loading.markdown(
+        '<div class="bot-bubble" style="opacity:0.7;">'
+        '<span style="color:#C8A84E;">⚖️ Thinking...</span></div>',
+        unsafe_allow_html=True,
+    )
+
     placeholder = st.empty()
     full_response = ""
     start = time.time()
 
     try:
+        first_chunk = True
         for chunk in stream_response(API_KEY, SYSTEM_PROMPT, messages_for_api):
+            if first_chunk:
+                loading.empty()  # Remove "Thinking..." once streaming starts
+                first_chunk = False
             full_response += chunk
-            # Show streaming with cursor
             placeholder.markdown(
                 f'<div class="bot-bubble streaming-cursor">{full_response}</div>',
                 unsafe_allow_html=True,
             )
 
         elapsed = time.time() - start
-        # Final render without cursor
         placeholder.markdown(
             f'<div class="bot-bubble">{full_response}</div>',
             unsafe_allow_html=True,
@@ -626,6 +614,7 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
         return full_response
 
     except Exception as e:
+        loading.empty()
         elapsed = time.time() - start
         if full_response:
             placeholder.markdown(
