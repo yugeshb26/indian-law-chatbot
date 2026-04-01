@@ -194,9 +194,10 @@ section[data-testid="stSidebar"] .stButton > button:hover {
 def load_context() -> str:
     with open(DATASET_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
+    # Load up to 200 entries for rich context (BNS, BNSS, BSA, Constitution)
     return "\n".join(
         f"Q: {item['prompt']}\nA: {item['response']}"
-        for item in data[:15]
+        for item in data[:200]
     )
 
 try:
