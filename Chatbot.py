@@ -3,7 +3,11 @@ import json
 import time
 import base64
 import os
-from google import genai
+from datetime import datetime
+
+from db import init_db, create_chat, get_all_chats, get_chat, get_messages
+from db import append_message, update_chat_title, delete_chat
+from gemini_engine import stream_response, regenerate_response, generate_title
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -17,7 +21,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Load Ambedkar background image as base64 ─────────────────────────────────
+# ── Init database ────────────────────────────────────────────────────────────
+init_db()
+
+# ── Load Ambedkar background ────────────────────────────────────────────────
 @st.cache_data
 def get_bg_image():
     img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ambedkar_bg.jpg")
@@ -28,18 +35,13 @@ def get_bg_image():
 
 bg_b64 = get_bg_image()
 
-# ── Ambedkar faded background (injected as a fixed div behind content) ───────
 if bg_b64:
     st.markdown(
         f"""
         <style>
-        /* ── Ambedkar portrait blended as watermark ────────────── */
         [data-testid="stMain"] {{
             background:
-                linear-gradient(
-                    rgba(255, 253, 248, 0.90),
-                    rgba(255, 243, 230, 0.90)
-                ),
+                linear-gradient(rgba(255, 253, 248, 0.90), rgba(255, 243, 230, 0.90)),
                 url("data:image/jpeg;base64,{bg_b64}");
             background-size: cover, 380px auto;
             background-position: center, center center;
@@ -51,20 +53,14 @@ if bg_b64:
         unsafe_allow_html=True,
     )
 
-# ── Custom CSS for clean, colorful UI ────────────────────────────────────────
+# ── Custom CSS — Indian Law Theme ────────────────────────────────────────────
 st.markdown("""
 <style>
-/* ── Global ─────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+#MainMenu, footer, header { visibility: hidden; }
 
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
-
-/* ── Hide default Streamlit extras ──────────────────────────────── */
-#MainMenu, footer, header {visibility: hidden;}
-
-/* ── Sidebar — deep navy (Ashoka Chakra / authority) ───────────── */
+/* ── Sidebar — navy ──────────────────────────────────────────── */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1B1464 0%, #0C2340 50%, #002147 100%);
     color: white;
@@ -77,7 +73,7 @@ section[data-testid="stSidebar"] .stMarkdown h3 {
     color: white !important;
 }
 
-/* ── Hero banner — saffron-to-maroon (tricolor + legal robes) ──── */
+/* ── Hero banner ─────────────────────────────────────────────── */
 .hero-banner {
     background: linear-gradient(135deg, #FF9933 0%, #C41E3A 100%);
     padding: 1.8rem 2rem;
@@ -86,77 +82,70 @@ section[data-testid="stSidebar"] .stMarkdown h3 {
     text-align: center;
     box-shadow: 0 8px 32px rgba(196, 30, 58, 0.25);
 }
-.hero-banner h1 {
-    color: white;
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 0;
-    letter-spacing: -0.5px;
-}
-.hero-banner p {
-    color: rgba(255,255,255,0.9);
-    font-size: 0.95rem;
-    margin: 0.4rem 0 0 0;
-}
+.hero-banner h1 { color: white; font-size: 1.8rem; font-weight: 700; margin: 0; }
+.hero-banner p { color: rgba(255,255,255,0.9); font-size: 0.95rem; margin: 0.4rem 0 0 0; }
+.hero-banner::before { content: "☸"; display: block; font-size: 2.5rem; margin-bottom: 0.3rem; opacity: 0.25; }
 
-/* ── Ashoka Chakra decorative ring ─────────────────────────────── */
-.hero-banner::before {
-    content: "☸";
-    display: block;
-    font-size: 2.5rem;
-    margin-bottom: 0.3rem;
-    opacity: 0.25;
-}
-
-/* ── Chat bubbles — saffron user, cream bot ────────────────────── */
+/* ── Chat bubbles ────────────────────────────────────────────── */
 .user-bubble {
     background: linear-gradient(135deg, #FF9933 0%, #E07C24 100%);
-    color: white;
-    padding: 0.9rem 1.2rem;
+    color: white; padding: 0.9rem 1.2rem;
     border-radius: 18px 18px 4px 18px;
     margin: 0.5rem 0 0.5rem 20%;
-    font-size: 0.95rem;
-    line-height: 1.5;
+    font-size: 0.95rem; line-height: 1.5;
     box-shadow: 0 2px 12px rgba(255, 153, 51, 0.25);
     word-wrap: break-word;
 }
 .bot-bubble {
-    background: #FFF8F0;
-    color: #1B1464;
+    background: #FFF8F0; color: #1B1464;
     padding: 0.9rem 1.2rem;
     border-radius: 18px 18px 18px 4px;
     margin: 0.5rem 20% 0.5rem 0;
-    font-size: 0.95rem;
-    line-height: 1.6;
-    border: 1px solid #E8D5B7;
-    border-left: 3px solid #C8A84E;
+    font-size: 0.95rem; line-height: 1.6;
+    border: 1px solid #E8D5B7; border-left: 3px solid #C8A84E;
     box-shadow: 0 1px 6px rgba(0,0,0,0.04);
     word-wrap: break-word;
 }
 
-/* ── Stat cards — gold accents ─────────────────────────────────── */
+/* ── Chat history items in sidebar ───────────────────────────── */
+.chat-item {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.4rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.chat-item:hover {
+    background: rgba(255, 153, 51, 0.2);
+    border-color: #FF9933;
+}
+.chat-item.active {
+    background: rgba(255, 153, 51, 0.25);
+    border-color: #FF9933;
+    border-left: 3px solid #FF9933;
+}
+.chat-item .chat-title {
+    font-size: 0.85rem; font-weight: 600;
+    color: white; margin: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chat-item .chat-date {
+    font-size: 0.7rem; color: rgba(255,255,255,0.5); margin: 0.15rem 0 0 0;
+}
+
+/* ── Stat cards ──────────────────────────────────────────────── */
 .stat-card {
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(200, 168, 78, 0.3);
-    border-radius: 12px;
-    padding: 1rem;
-    text-align: center;
-    margin-bottom: 0.5rem;
+    border-radius: 12px; padding: 0.8rem; text-align: center;
 }
-.stat-card .stat-num {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #C8A84E;
-}
-.stat-card .stat-label {
-    font-size: 0.75rem;
-    color: rgba(255,255,255,0.7);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
+.stat-card .stat-num { font-size: 1.3rem; font-weight: 700; color: #C8A84E; }
+.stat-card .stat-label { font-size: 0.7rem; color: rgba(255,255,255,0.7); text-transform: uppercase; }
 
-/* ── Topic buttons — saffron hover ─────────────────────────────── */
-section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {
+/* ── Sidebar buttons ─────────────────────────────────────────── */
+section[data-testid="stSidebar"] .stButton > button {
     background: rgba(255,255,255,0.08) !important;
     border: 1px solid rgba(255,255,255,0.18) !important;
     color: white !important;
@@ -166,12 +155,12 @@ section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {
     text-align: left !important;
     transition: all 0.2s !important;
 }
-section[data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {
+section[data-testid="stSidebar"] .stButton > button:hover {
     background: rgba(255, 153, 51, 0.25) !important;
     border-color: #FF9933 !important;
 }
 
-/* ── Chat input — saffron accent ───────────────────────────────── */
+/* ── Chat input ──────────────────────────────────────────────── */
 .stChatInput > div {
     border-radius: 25px !important;
     border: 2px solid rgba(255, 153, 51, 0.35) !important;
@@ -182,33 +171,20 @@ section[data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {
     box-shadow: 0 0 0 3px rgba(255, 153, 51, 0.15) !important;
 }
 
-/* ── Spinner — saffron ─────────────────────────────────────────── */
-.stSpinner > div {
-    border-top-color: #FF9933 !important;
-}
+/* ── Action buttons (regenerate, continue) ───────────────────── */
+.action-row { display: flex; gap: 0.5rem; margin: 0.4rem 0 0.8rem 0; }
 
-/* ── Sidebar clear button — deep maroon ────────────────────────── */
-section[data-testid="stSidebar"] .stButton > button {
-    background: linear-gradient(135deg, #8B0000, #6B0F1A) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 10px;
-    padding: 0.5rem 1.5rem;
-    font-weight: 600;
-    width: 100%;
-    transition: transform 0.2s;
-}
-section[data-testid="stSidebar"] .stButton > button:hover {
-    transform: scale(1.02);
-    box-shadow: 0 4px 15px rgba(139, 0, 0, 0.35);
-}
-
-/* ── Tricolor accent bar at top ────────────────────────────────── */
+/* ── Tricolor bar ────────────────────────────────────────────── */
 .tricolor-bar {
     height: 4px;
     background: linear-gradient(90deg, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%);
-    border-radius: 2px;
-    margin-bottom: 1rem;
+    border-radius: 2px; margin-bottom: 1rem;
+}
+
+/* ── Streaming cursor ────────────────────────────────────────── */
+@keyframes blink { 50% { opacity: 0; } }
+.streaming-cursor::after {
+    content: "▊"; animation: blink 0.8s infinite; color: #FF9933;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -229,7 +205,6 @@ except FileNotFoundError:
     st.error(f"File not found: `{DATASET_PATH}`")
     st.stop()
 
-# ── System prompt ────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
     "You are an expert Indian Law Chatbot assistant with comprehensive knowledge of "
     "Indian legal provisions, acts, and regulations.\n\n"
@@ -241,56 +216,104 @@ SYSTEM_PROMPT = (
     "5. Mention important case law and precedents when applicable\n"
     "6. Clarify constitutional provisions and fundamental rights\n"
     "7. Suggest consulting qualified legal professionals for specific advice\n\n"
+    "Always provide complete, thorough responses. Do not cut off mid-sentence.\n\n"
     "Dataset Context:\n" + dataset_context
 )
 
-# ── Gemini API call ──────────────────────────────────────────────────────────
-def ask(question: str) -> str:
-    client = genai.Client(api_key=API_KEY)
-    full_prompt = SYSTEM_PROMPT + f"\n\n--- USER QUESTION ---\n{question}\n\n--- ANSWER ---"
-
-    resp = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[{"role": "user", "parts": [{"text": full_prompt}]}],
-        config={"temperature": 0.5, "top_p": 0.85, "max_output_tokens": 1000},
-    )
-
-    if not resp or not resp.text:
-        raise ValueError("Empty response from Gemini")
-    return resp.text
-
-# ── Session state ────────────────────────────────────────────────────────────
+# ── Session state init ───────────────────────────────────────────────────────
+if "active_chat_id" not in st.session_state:
+    st.session_state.active_chat_id = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+
+def load_chat(chat_id: str):
+    """Load a chat from DB into session state."""
+    st.session_state.active_chat_id = chat_id
+    db_msgs = get_messages(chat_id)
+    st.session_state.messages = [{"role": m["role"], "content": m["content"]} for m in db_msgs]
+
+
+def start_new_chat():
+    """Create a fresh chat."""
+    st.session_state.active_chat_id = None
+    st.session_state.messages = []
+
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚖️ Indian Law Bot")
     st.markdown(
         "<p style='color:rgba(255,255,255,0.7); font-size:0.85rem;'>"
-        "Your AI-powered legal assistant for Indian law</p>",
+        "Your AI-powered legal assistant</p>",
         unsafe_allow_html=True,
     )
     st.markdown("---")
 
+    # New Chat button
+    if st.button("✨  New Chat", key="new_chat", use_container_width=True):
+        start_new_chat()
+        st.rerun()
+
+    st.markdown("---")
+
     # Stats
-    total_msgs = len(st.session_state.messages)
-    user_msgs = sum(1 for m in st.session_state.messages if m["role"] == "user")
+    all_chats = get_all_chats()
+    total_chats = len(all_chats)
+    total_msgs = sum(1 for m in st.session_state.messages if m["role"] == "user")
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(
-            f'<div class="stat-card"><div class="stat-num">{user_msgs}</div>'
-            f'<div class="stat-label">Questions</div></div>',
+            f'<div class="stat-card"><div class="stat-num">{total_chats}</div>'
+            f'<div class="stat-label">Chats</div></div>',
             unsafe_allow_html=True,
         )
     with col2:
         st.markdown(
-            f'<div class="stat-card"><div class="stat-num">{total_msgs - user_msgs}</div>'
-            f'<div class="stat-label">Answers</div></div>',
+            f'<div class="stat-card"><div class="stat-num">{total_msgs}</div>'
+            f'<div class="stat-label">Questions</div></div>',
             unsafe_allow_html=True,
         )
 
     st.markdown("---")
+
+    # Chat History List
+    st.markdown("### Chat History")
+    if not all_chats:
+        st.markdown(
+            "<p style='color:rgba(255,255,255,0.4); font-size:0.8rem;'>No chats yet. Start asking!</p>",
+            unsafe_allow_html=True,
+        )
+    else:
+        for chat in all_chats:
+            is_active = chat["chat_id"] == st.session_state.active_chat_id
+            active_cls = " active" if is_active else ""
+            try:
+                dt = datetime.fromisoformat(chat["updated_at"])
+                date_str = dt.strftime("%b %d, %I:%M %p")
+            except Exception:
+                date_str = chat["updated_at"][:16]
+
+            # Each chat is a button
+            col_btn, col_del = st.columns([5, 1])
+            with col_btn:
+                if st.button(
+                    f"💬 {chat['title'][:30]}",
+                    key=f"chat_{chat['chat_id']}",
+                    use_container_width=True,
+                ):
+                    load_chat(chat["chat_id"])
+                    st.rerun()
+            with col_del:
+                if st.button("🗑", key=f"del_{chat['chat_id']}"):
+                    delete_chat(chat["chat_id"])
+                    if st.session_state.active_chat_id == chat["chat_id"]:
+                        start_new_chat()
+                    st.rerun()
+
+    st.markdown("---")
+
+    # Quick Topics
     st.markdown("### Quick Topics")
     topics = [
         ("⚖️", "Fundamental Rights", "Explain the Fundamental Rights under the Indian Constitution"),
@@ -306,18 +329,13 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
-    if st.button("🗑️  Clear Chat"):
-        st.session_state.messages = []
-        st.rerun()
-
-    st.markdown("---")
     st.markdown(
         "<p style='color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center;'>"
         "Powered by Gemini 2.5 Flash<br>Not a substitute for legal advice</p>",
         unsafe_allow_html=True,
     )
 
-# ── Hero Banner ──────────────────────────────────────────────────────────────
+# ── Hero Banner (only when no messages) ──────────────────────────────────────
 if not st.session_state.messages:
     st.markdown(
         """
@@ -331,34 +349,135 @@ if not st.session_state.messages:
         unsafe_allow_html=True,
     )
 
-# ── Render chat history with custom bubbles ──────────────────────────────────
-for msg in st.session_state.messages:
+# ── Render chat history ─────────────────────────────────────────────────────
+for i, msg in enumerate(st.session_state.messages):
     if msg["role"] == "user":
         st.markdown(f'<div class="user-bubble">{msg["content"]}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="bot-bubble">{msg["content"]}</div>', unsafe_allow_html=True)
+
+# ── Regenerate & Continue buttons (after last assistant message) ─────────────
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
+    col_regen, col_cont, _ = st.columns([1, 1, 3])
+    with col_regen:
+        regen_clicked = st.button("🔄 Regenerate", key="regen_btn")
+    with col_cont:
+        cont_clicked = st.button("➡️ Continue", key="cont_btn")
+else:
+    regen_clicked = False
+    cont_clicked = False
 
 # ── Handle quick topic clicks ────────────────────────────────────────────────
 pending = st.session_state.pop("pending_topic", None)
 
 # ── Chat input ───────────────────────────────────────────────────────────────
 prompt = st.chat_input("Ask anything about Indian law...")
-
-# Use pending topic if no manual input
 active_prompt = prompt or pending
 
+
+# ── Process: New message / Regenerate / Continue ─────────────────────────────
+
+def stream_and_display(messages_for_api: list[dict]) -> str:
+    """Stream Gemini response with live display, return full text."""
+    placeholder = st.empty()
+    full_response = ""
+    start = time.time()
+
+    try:
+        for chunk in stream_response(API_KEY, SYSTEM_PROMPT, messages_for_api):
+            full_response += chunk
+            # Show streaming with cursor
+            placeholder.markdown(
+                f'<div class="bot-bubble streaming-cursor">{full_response}</div>',
+                unsafe_allow_html=True,
+            )
+
+        elapsed = time.time() - start
+        # Final render without cursor
+        placeholder.markdown(
+            f'<div class="bot-bubble">{full_response}</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(f"Response time: {elapsed:.1f}s")
+        return full_response
+
+    except Exception as e:
+        elapsed = time.time() - start
+        if full_response:
+            placeholder.markdown(
+                f'<div class="bot-bubble">{full_response}</div>',
+                unsafe_allow_html=True,
+            )
+            st.warning(f"Response may be incomplete ({elapsed:.1f}s). Click 'Continue' to extend.")
+            return full_response
+        else:
+            placeholder.empty()
+            st.error(f"Failed to get response: {str(e)[:200]}")
+            return ""
+
+
 if active_prompt:
+    # ── New user message ─────────────────────────────────────────────────────
+    # Create chat in DB if this is a new conversation
+    if not st.session_state.active_chat_id:
+        chat_id = create_chat("New Chat")
+        st.session_state.active_chat_id = chat_id
+    else:
+        chat_id = st.session_state.active_chat_id
+
+    # Save user message
     st.session_state.messages.append({"role": "user", "content": active_prompt})
+    append_message(chat_id, "user", active_prompt)
     st.markdown(f'<div class="user-bubble">{active_prompt}</div>', unsafe_allow_html=True)
 
-    with st.spinner("Thinking..."):
-        try:
-            start = time.time()
-            reply = ask(active_prompt)
-            elapsed = time.time() - start
+    # Build context-aware messages for API (full history)
+    api_messages = [{"role": "user", "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"]}]
+    for m in st.session_state.messages[1:]:
+        api_messages.append(m)
 
-            st.markdown(f'<div class="bot-bubble">{reply}</div>', unsafe_allow_html=True)
-            st.caption(f"Response time: {elapsed:.1f}s")
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-        except Exception as e:
-            st.error(f"Something went wrong: {str(e)[:200]}")
+    # Stream response
+    reply = stream_and_display(api_messages)
+
+    if reply:
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        append_message(chat_id, "assistant", reply)
+
+        # Auto-generate title from first question
+        if len(get_messages(chat_id)) <= 2:
+            title = generate_title(API_KEY, active_prompt)
+            update_chat_title(chat_id, title)
+
+elif regen_clicked and st.session_state.messages:
+    # ── Regenerate last response ─────────────────────────────────────────────
+    chat_id = st.session_state.active_chat_id
+    # Remove last assistant message
+    st.session_state.messages.pop()
+
+    api_messages = [{"role": "user", "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"]}]
+    for m in st.session_state.messages[1:]:
+        api_messages.append(m)
+
+    reply = stream_and_display(api_messages)
+    if reply:
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        if chat_id:
+            append_message(chat_id, "assistant", reply)
+
+elif cont_clicked and st.session_state.messages:
+    # ── Continue last response ───────────────────────────────────────────────
+    chat_id = st.session_state.active_chat_id
+    # Add a continue request
+    cont_msg = {"role": "user", "content": "Continue your response. Do not repeat what you already said."}
+    st.session_state.messages.append(cont_msg)
+    if chat_id:
+        append_message(chat_id, "user", cont_msg["content"])
+
+    api_messages = [{"role": "user", "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"]}]
+    for m in st.session_state.messages[1:]:
+        api_messages.append(m)
+
+    reply = stream_and_display(api_messages)
+    if reply:
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        if chat_id:
+            append_message(chat_id, "assistant", reply)
