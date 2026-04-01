@@ -10,11 +10,8 @@ from db import append_message, update_chat_title, delete_chat
 from gemini_engine import stream_response, regenerate_response, generate_title, init_rotator
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-# Multiple keys — rotates automatically when one is exhausted
-API_KEYS = [
-    "AIzaSyCnsyhPuKbHLgifn3yVDBRJn9nQ3pTR5u0",
-    "AIzaSyArud_XocEjpQXO36VQVTpG_OQ_ZI2XeEQ",
-]
+# API keys loaded from Streamlit secrets (never hardcoded in public repos)
+API_KEYS = list(st.secrets["GEMINI_API_KEYS"])
 rotator = init_rotator(API_KEYS)
 API_KEY = API_KEYS[0]
 DATASET_PATH = "Alpie-core_core_indian_law.json"
