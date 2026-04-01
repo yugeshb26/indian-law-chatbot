@@ -63,10 +63,12 @@ st.markdown("""
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 #MainMenu, footer, header { visibility: hidden; }
 
-/* ── Sidebar — navy ──────────────────────────────────────────── */
+/* ── Sidebar — ChatGPT-style slide panel ─────────────────────── */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1B1464 0%, #0C2340 50%, #002147 100%);
     color: white;
+    transition: transform 0.3s ease, opacity 0.3s ease !important;
+    z-index: 999 !important;
 }
 section[data-testid="stSidebar"] .stMarkdown p,
 section[data-testid="stSidebar"] .stMarkdown li,
@@ -190,12 +192,75 @@ section[data-testid="stSidebar"] .stButton > button:hover {
     content: "▊"; animation: blink 0.8s infinite; color: #FF9933;
 }
 
+/* ── Sidebar toggle button (hamburger) — hidden on desktop ───── */
+.sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 1001;
+    background: linear-gradient(135deg, #1B1464, #0C2340);
+    color: white;
+    border: 2px solid rgba(255, 153, 51, 0.4);
+    border-radius: 12px;
+    width: 44px;
+    height: 44px;
+    font-size: 1.3rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    transition: all 0.2s;
+}
+.sidebar-toggle:hover {
+    background: linear-gradient(135deg, #FF9933, #E07C24);
+    border-color: #FF9933;
+    transform: scale(1.05);
+}
+
+/* ── Sidebar overlay (dark backdrop on mobile) ───────────────── */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 998;
+    backdrop-filter: blur(2px);
+}
+
+/* ── Streamlit sidebar close button styling ──────────────────── */
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {
+    display: block !important;
+    visibility: visible !important;
+}
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button {
+    background: rgba(255,255,255,0.1) !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+    color: white !important;
+    border-radius: 8px !important;
+}
+
 /* ════════════════════════════════════════════════════════════════
    RESPONSIVE DESIGN — Mobile / Tablet / Desktop
    ════════════════════════════════════════════════════════════════ */
 
 /* ── Mobile (up to 768px) ────────────────────────────────────── */
 @media (max-width: 768px) {
+    /* Show toggle button on mobile */
+    .sidebar-toggle { display: flex; }
+
+    /* Make sidebar overlay full screen on mobile */
+    section[data-testid="stSidebar"] {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        height: 100vh !important;
+        min-width: 280px !important;
+        max-width: 85vw !important;
+        box-shadow: 4px 0 25px rgba(0,0,0,0.3) !important;
+    }
+
     /* Full-width chat bubbles on small screens */
     .user-bubble {
         margin: 0.4rem 0 0.4rem 8%;
@@ -215,6 +280,7 @@ section[data-testid="stSidebar"] .stButton > button:hover {
         padding: 1.2rem 1rem;
         border-radius: 12px;
         margin-bottom: 1rem;
+        margin-top: 3.5rem;
     }
     .hero-banner h1 { font-size: 1.3rem; }
     .hero-banner p { font-size: 0.85rem; }
@@ -231,11 +297,6 @@ section[data-testid="stSidebar"] .stButton > button:hover {
     /* Chat input closer to edge */
     .stChatInput > div { border-radius: 20px !important; }
 
-    /* Sidebar narrower */
-    section[data-testid="stSidebar"] {
-        min-width: 240px !important;
-        max-width: 280px !important;
-    }
     section[data-testid="stSidebar"] .stButton > button {
         font-size: 0.8rem !important;
         padding: 0.4rem 0.6rem !important;
@@ -471,6 +532,32 @@ with st.sidebar:
         "Powered by Gemini 2.5 Flash<br>Not a substitute for legal advice</p>",
         unsafe_allow_html=True,
     )
+
+# ── Mobile sidebar toggle button ─────────────────────────────────────────────
+st.markdown(
+    """
+    <button class="sidebar-toggle" onclick="
+        var sidebar = window.parent.document.querySelector('section[data-testid=stSidebar]');
+        var btn = window.parent.document.querySelector('[data-testid=stSidebarCollapse] button')
+                  || window.parent.document.querySelector('[data-testid=stSidebarCollapseButton] button');
+        if (btn) { btn.click(); }
+        else if (sidebar) {
+            var isHidden = sidebar.getAttribute('aria-expanded') === 'false'
+                          || sidebar.style.display === 'none'
+                          || sidebar.offsetWidth < 10;
+            if (isHidden) {
+                sidebar.style.display = 'block';
+                sidebar.style.transform = 'translateX(0)';
+                sidebar.setAttribute('aria-expanded', 'true');
+            } else {
+                sidebar.setAttribute('aria-expanded', 'false');
+                sidebar.style.transform = 'translateX(-100%)';
+            }
+        }
+    ">☰</button>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ── Hero Banner (only when no messages) ──────────────────────────────────────
 if not st.session_state.messages:
