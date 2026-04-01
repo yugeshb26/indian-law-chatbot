@@ -189,6 +189,139 @@ section[data-testid="stSidebar"] .stButton > button:hover {
 .streaming-cursor::after {
     content: "▊"; animation: blink 0.8s infinite; color: #FF9933;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN — Mobile / Tablet / Desktop
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Mobile (up to 768px) ────────────────────────────────────── */
+@media (max-width: 768px) {
+    /* Full-width chat bubbles on small screens */
+    .user-bubble {
+        margin: 0.4rem 0 0.4rem 8%;
+        padding: 0.7rem 1rem;
+        font-size: 0.9rem;
+        border-radius: 16px 16px 4px 16px;
+    }
+    .bot-bubble {
+        margin: 0.4rem 8% 0.4rem 0;
+        padding: 0.7rem 1rem;
+        font-size: 0.9rem;
+        border-radius: 16px 16px 16px 4px;
+    }
+
+    /* Compact hero banner */
+    .hero-banner {
+        padding: 1.2rem 1rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+    }
+    .hero-banner h1 { font-size: 1.3rem; }
+    .hero-banner p { font-size: 0.85rem; }
+    .hero-banner::before { font-size: 1.8rem; margin-bottom: 0.2rem; }
+
+    /* Tricolor bar thinner */
+    .tricolor-bar { height: 3px; margin-bottom: 0.6rem; }
+
+    /* Stat cards smaller */
+    .stat-card { padding: 0.5rem; }
+    .stat-card .stat-num { font-size: 1.1rem; }
+    .stat-card .stat-label { font-size: 0.6rem; }
+
+    /* Chat input closer to edge */
+    .stChatInput > div { border-radius: 20px !important; }
+
+    /* Sidebar narrower */
+    section[data-testid="stSidebar"] {
+        min-width: 240px !important;
+        max-width: 280px !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button {
+        font-size: 0.8rem !important;
+        padding: 0.4rem 0.6rem !important;
+    }
+
+    /* Reduce main padding */
+    .stMainBlockContainer { padding: 0.5rem 0.8rem !important; }
+
+    /* Stack action buttons vertically */
+    .action-row { flex-direction: column; }
+}
+
+/* ── Small phones (up to 480px) ──────────────────────────────── */
+@media (max-width: 480px) {
+    .user-bubble {
+        margin: 0.3rem 0 0.3rem 4%;
+        padding: 0.6rem 0.8rem;
+        font-size: 0.85rem;
+    }
+    .bot-bubble {
+        margin: 0.3rem 4% 0.3rem 0;
+        padding: 0.6rem 0.8rem;
+        font-size: 0.85rem;
+    }
+
+    .hero-banner {
+        padding: 1rem 0.8rem;
+        border-radius: 10px;
+    }
+    .hero-banner h1 { font-size: 1.1rem; }
+    .hero-banner p { font-size: 0.8rem; }
+    .hero-banner::before { font-size: 1.5rem; }
+
+    .stat-card .stat-num { font-size: 1rem; }
+
+    /* Ensure text doesn't overflow */
+    .stMarkdown, .stChatMessage { word-break: break-word; overflow-wrap: anywhere; }
+
+    .stMainBlockContainer { padding: 0.3rem 0.5rem !important; }
+}
+
+/* ── Tablet (769px to 1024px) ────────────────────────────────── */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .user-bubble { margin: 0.5rem 0 0.5rem 12%; }
+    .bot-bubble { margin: 0.5rem 12% 0.5rem 0; }
+
+    .hero-banner { padding: 1.5rem 1.5rem; }
+    .hero-banner h1 { font-size: 1.6rem; }
+
+    section[data-testid="stSidebar"] {
+        min-width: 260px !important;
+        max-width: 300px !important;
+    }
+}
+
+/* ── Large desktop (1400px+) ─────────────────────────────────── */
+@media (min-width: 1400px) {
+    .user-bubble { margin: 0.5rem 0 0.5rem 25%; }
+    .bot-bubble { margin: 0.5rem 25% 0.5rem 0; }
+
+    .hero-banner { padding: 2rem 2.5rem; }
+    .hero-banner h1 { font-size: 2rem; }
+}
+
+/* ── Touch-friendly for all mobile ───────────────────────────── */
+@media (hover: none) and (pointer: coarse) {
+    /* Larger tap targets */
+    section[data-testid="stSidebar"] .stButton > button {
+        min-height: 44px !important;
+        padding: 0.5rem 0.8rem !important;
+    }
+    .stChatInput > div { min-height: 48px !important; }
+
+    /* No hover effects on touch */
+    .chat-item:hover { background: rgba(255,255,255,0.06); }
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(255,255,255,0.08) !important;
+    }
+}
+
+/* ── Safe area for notched phones (iPhone etc.) ──────────────── */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .stChatInput {
+        padding-bottom: env(safe-area-inset-bottom) !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
