@@ -45,34 +45,74 @@ def get_bg_image():
 bg_b64 = get_bg_image()
 
 if bg_b64:
+    # Aether Neon: dark immersive background with subtle Ambedkar overlay + grid
     st.markdown(
         f"""
         <style>
         [data-testid="stMain"] {{
             background:
-                linear-gradient(rgba(255, 253, 248, 0.90), rgba(255, 243, 230, 0.90)),
+                radial-gradient(ellipse at top left, rgba(180, 90, 237, 0.18) 0%, transparent 45%),
+                radial-gradient(ellipse at bottom right, rgba(0, 200, 255, 0.18) 0%, transparent 45%),
+                radial-gradient(ellipse at center, rgba(255, 184, 77, 0.10) 0%, transparent 60%),
+                linear-gradient(180deg, rgba(7, 9, 18, 0.92) 0%, rgba(10, 14, 39, 0.94) 100%),
                 url("data:image/jpeg;base64,{bg_b64}");
-            background-size: cover, 380px auto;
-            background-position: center, center center;
-            background-repeat: no-repeat, no-repeat;
-            background-attachment: fixed, fixed;
+            background-size: cover, cover, cover, cover, 480px auto;
+            background-position: center, center, center, center, center 30%;
+            background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+            background-attachment: fixed, fixed, fixed, fixed, fixed;
         }}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-# ── Custom CSS — Indian Law Theme ────────────────────────────────────────────
+# ── Custom CSS — Aether Neon (Indian Law × Cyber-Glass) ─────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-#MainMenu, footer, header { visibility: hidden; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
-/* ── Sidebar — ChatGPT-style slide panel ─────────────────────── */
+/* ── Design tokens ──────────────────────────────────────────── */
+:root {
+    --bg-deep:        #070912;
+    --bg-base:        #0A0E27;
+    --bg-elev:        #111634;
+    --glass:          rgba(255, 255, 255, 0.04);
+    --glass-strong:   rgba(255, 255, 255, 0.07);
+    --glass-border:   rgba(255, 255, 255, 0.10);
+
+    --gold:           #FFB84D;        /* Indian saffron, neonized */
+    --gold-bright:    #FFD580;
+    --gold-glow:      rgba(255, 184, 77, 0.45);
+
+    --cyan:           #00E5FF;
+    --cyan-glow:      rgba(0, 229, 255, 0.45);
+    --violet:         #B14AED;
+    --violet-glow:    rgba(177, 74, 237, 0.40);
+    --magenta:        #FF3DA1;
+
+    --text-primary:   #E8EBF7;
+    --text-soft:      rgba(232, 235, 247, 0.78);
+    --text-dim:       rgba(232, 235, 247, 0.55);
+}
+
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: var(--text-primary); }
+#MainMenu, footer, header { visibility: hidden; }
+.stApp { background: transparent; }
+
+/* Override Streamlit text colors for dark theme */
+.stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span,
+.stCaption, [data-testid="stCaptionContainer"] {
+    color: var(--text-soft) !important;
+}
+
+/* ── Sidebar — Cyber-glass dark panel ────────────────────────── */
 section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #1B1464 0%, #0C2340 50%, #002147 100%);
-    color: white;
+    background:
+        linear-gradient(180deg, rgba(11, 14, 39, 0.92) 0%, rgba(7, 9, 18, 0.96) 100%) !important;
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border-right: 1px solid var(--glass-border);
+    color: var(--text-primary);
     transition: transform 0.3s ease, opacity 0.3s ease !important;
     z-index: 999 !important;
 }
@@ -81,121 +121,249 @@ section[data-testid="stSidebar"] .stMarkdown li,
 section[data-testid="stSidebar"] .stMarkdown h1,
 section[data-testid="stSidebar"] .stMarkdown h2,
 section[data-testid="stSidebar"] .stMarkdown h3 {
-    color: white !important;
+    color: var(--text-primary) !important;
+}
+section[data-testid="stSidebar"] hr {
+    border-color: var(--glass-border) !important;
+    opacity: 0.6;
 }
 
-/* ── Hero banner ─────────────────────────────────────────────── */
+/* ── Hero banner — glass card with neon glow ─────────────────── */
 .hero-banner {
-    background: linear-gradient(135deg, #FF9933 0%, #C41E3A 100%);
-    padding: 1.8rem 2rem;
-    border-radius: 16px;
+    position: relative;
+    background:
+        linear-gradient(135deg, rgba(255, 184, 77, 0.10) 0%, rgba(177, 74, 237, 0.10) 100%),
+        var(--glass);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    padding: 2.2rem 2rem;
+    border-radius: 22px;
     margin-bottom: 1.5rem;
     text-align: center;
-    box-shadow: 0 8px 32px rgba(196, 30, 58, 0.25);
+    box-shadow:
+        0 0 0 1px rgba(255, 184, 77, 0.15) inset,
+        0 20px 60px -15px rgba(177, 74, 237, 0.30),
+        0 8px 32px rgba(0, 0, 0, 0.40);
+    overflow: hidden;
 }
-.hero-banner h1 { color: white; font-size: 1.8rem; font-weight: 700; margin: 0; }
-.hero-banner p { color: rgba(255,255,255,0.9); font-size: 0.95rem; margin: 0.4rem 0 0 0; }
-.hero-banner::before { content: "☸"; display: block; font-size: 2.5rem; margin-bottom: 0.3rem; opacity: 0.25; }
+.hero-banner::before {
+    content: "☸";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12rem;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--violet) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    opacity: 0.10;
+    pointer-events: none;
+    z-index: 0;
+    animation: chakra-spin 60s linear infinite;
+}
+@keyframes chakra-spin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.hero-banner > * { position: relative; z-index: 1; }
+.hero-banner h1 {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    background: linear-gradient(135deg, var(--gold-bright) 0%, var(--cyan) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0;
+    text-shadow: 0 0 40px var(--gold-glow);
+}
+.hero-banner p {
+    color: var(--text-soft);
+    font-size: 0.95rem;
+    margin: 0.5rem 0 0 0;
+    font-weight: 400;
+}
 
-/* ── Chat bubbles ────────────────────────────────────────────── */
+/* ── Chat bubbles — Glassmorphic ─────────────────────────────── */
 .user-bubble {
-    background: linear-gradient(135deg, #FF9933 0%, #E07C24 100%);
-    color: white; padding: 0.9rem 1.2rem;
-    border-radius: 18px 18px 4px 18px;
+    background:
+        linear-gradient(135deg, rgba(255, 184, 77, 0.22) 0%, rgba(255, 61, 161, 0.22) 100%),
+        var(--glass);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    color: var(--text-primary);
+    padding: 0.95rem 1.25rem;
+    border-radius: 20px 20px 4px 20px;
+    border: 1px solid rgba(255, 184, 77, 0.30);
     margin: 0.5rem 0 0.5rem 20%;
-    font-size: 0.95rem; line-height: 1.5;
-    box-shadow: 0 2px 12px rgba(255, 153, 51, 0.25);
+    font-size: 0.95rem;
+    line-height: 1.55;
+    box-shadow:
+        0 0 20px -5px var(--gold-glow),
+        0 8px 24px rgba(0, 0, 0, 0.30);
     word-wrap: break-word;
 }
 .bot-bubble {
-    background: #FFF8F0; color: #1B1464;
-    padding: 0.9rem 1.2rem;
-    border-radius: 18px 18px 18px 4px;
+    background:
+        linear-gradient(135deg, rgba(0, 229, 255, 0.06) 0%, rgba(177, 74, 237, 0.06) 100%),
+        var(--glass-strong);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    color: var(--text-primary);
+    padding: 1.1rem 1.3rem;
+    border-radius: 20px 20px 20px 4px;
+    border: 1px solid var(--glass-border);
+    border-left: 2px solid var(--cyan);
     margin: 0.5rem 20% 0.5rem 0;
-    font-size: 0.95rem; line-height: 1.6;
-    border: 1px solid #E8D5B7; border-left: 3px solid #C8A84E;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+    font-size: 0.95rem;
+    line-height: 1.65;
+    box-shadow:
+        0 0 30px -10px var(--cyan-glow),
+        0 8px 24px rgba(0, 0, 0, 0.35);
     word-wrap: break-word;
-}
-
-/* ── Chat history items in sidebar ───────────────────────────── */
-.chat-item {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 10px;
-    padding: 0.6rem 0.8rem;
-    margin-bottom: 0.4rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.chat-item:hover {
-    background: rgba(255, 153, 51, 0.2);
-    border-color: #FF9933;
-}
-.chat-item.active {
-    background: rgba(255, 153, 51, 0.25);
-    border-color: #FF9933;
-    border-left: 3px solid #FF9933;
-}
-.chat-item .chat-title {
-    font-size: 0.85rem; font-weight: 600;
-    color: white; margin: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.chat-item .chat-date {
-    font-size: 0.7rem; color: rgba(255,255,255,0.5); margin: 0.15rem 0 0 0;
 }
 
 /* ── Stat cards ──────────────────────────────────────────────── */
 .stat-card {
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(200, 168, 78, 0.3);
-    border-radius: 12px; padding: 0.8rem; text-align: center;
+    background: var(--glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 0.85rem;
+    text-align: center;
+    box-shadow: 0 0 20px -8px var(--gold-glow);
+    transition: all 0.25s;
 }
-.stat-card .stat-num { font-size: 1.3rem; font-weight: 700; color: #C8A84E; }
-.stat-card .stat-label { font-size: 0.7rem; color: rgba(255,255,255,0.7); text-transform: uppercase; }
+.stat-card:hover {
+    border-color: rgba(255, 184, 77, 0.35);
+    box-shadow: 0 0 25px -5px var(--gold-glow);
+}
+.stat-card .stat-num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--gold-bright) 0%, var(--cyan) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.stat-card .stat-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+}
 
 /* ── Sidebar buttons ─────────────────────────────────────────── */
 section[data-testid="stSidebar"] .stButton > button {
-    background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.18) !important;
-    color: white !important;
-    border-radius: 10px !important;
+    background: var(--glass) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text-primary) !important;
+    border-radius: 12px !important;
     font-size: 0.85rem !important;
     font-weight: 500 !important;
     text-align: left !important;
-    transition: all 0.2s !important;
+    transition: all 0.25s !important;
 }
 section[data-testid="stSidebar"] .stButton > button:hover {
-    background: rgba(255, 153, 51, 0.25) !important;
-    border-color: #FF9933 !important;
+    background: linear-gradient(135deg, rgba(255, 184, 77, 0.15), rgba(177, 74, 237, 0.15)) !important;
+    border-color: rgba(255, 184, 77, 0.40) !important;
+    box-shadow: 0 0 20px -5px var(--gold-glow);
+    transform: translateY(-1px);
 }
 
-/* ── Chat input ──────────────────────────────────────────────── */
+/* New Chat button — primary CTA */
+section[data-testid="stSidebar"] .stButton:first-of-type > button {
+    background: linear-gradient(135deg, rgba(255, 184, 77, 0.25), rgba(177, 74, 237, 0.25)) !important;
+    border: 1px solid rgba(255, 184, 77, 0.45) !important;
+    text-align: center !important;
+    font-weight: 600 !important;
+    box-shadow: 0 0 25px -8px var(--gold-glow);
+}
+
+/* ── Chat input — neon glow on focus ─────────────────────────── */
+.stChatInput {
+    background: transparent !important;
+}
 .stChatInput > div {
-    border-radius: 25px !important;
-    border: 2px solid rgba(255, 153, 51, 0.35) !important;
-    transition: border 0.3s;
+    background: var(--glass-strong) !important;
+    backdrop-filter: blur(20px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+    border-radius: 28px !important;
+    border: 1px solid var(--glass-border) !important;
+    box-shadow:
+        0 0 0 0 transparent,
+        0 8px 32px rgba(0, 0, 0, 0.35) !important;
+    transition: all 0.3s ease !important;
 }
 .stChatInput > div:focus-within {
-    border-color: #FF9933 !important;
-    box-shadow: 0 0 0 3px rgba(255, 153, 51, 0.15) !important;
+    border-color: var(--gold) !important;
+    box-shadow:
+        0 0 0 4px rgba(255, 184, 77, 0.15),
+        0 0 30px -5px var(--gold-glow),
+        0 8px 32px rgba(0, 0, 0, 0.40) !important;
 }
+.stChatInput textarea {
+    color: var(--text-primary) !important;
+    background: transparent !important;
+}
+.stChatInput textarea::placeholder { color: var(--text-dim) !important; }
 
 /* ── Action buttons (regenerate, continue) ───────────────────── */
 .action-row { display: flex; gap: 0.5rem; margin: 0.4rem 0 0.8rem 0; }
 
-/* ── Tricolor bar ────────────────────────────────────────────── */
-.tricolor-bar {
-    height: 4px;
-    background: linear-gradient(90deg, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%);
-    border-radius: 2px; margin-bottom: 1rem;
+/* Main content buttons (regen, continue) */
+[data-testid="stMain"] .stButton > button {
+    background: var(--glass-strong) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text-primary) !important;
+    border-radius: 12px !important;
+    font-size: 0.82rem !important;
+    font-weight: 500 !important;
+    transition: all 0.25s !important;
+}
+[data-testid="stMain"] .stButton > button:hover {
+    border-color: var(--cyan) !important;
+    box-shadow: 0 0 20px -5px var(--cyan-glow);
+    transform: translateY(-1px);
 }
 
-/* ── Streaming cursor ────────────────────────────────────────── */
+/* ── Tricolor bar — neon edition ─────────────────────────────── */
+.tricolor-bar {
+    height: 2px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--gold) 25%,
+        var(--cyan) 50%,
+        var(--violet) 75%,
+        transparent 100%);
+    border-radius: 2px;
+    margin-bottom: 1rem;
+    box-shadow: 0 0 12px var(--gold-glow);
+    animation: shimmer 4s ease-in-out infinite;
+}
+@keyframes shimmer {
+    0%, 100% { opacity: 0.7; }
+    50%      { opacity: 1; }
+}
+
+/* ── Streaming cursor — neon ─────────────────────────────────── */
 @keyframes blink { 50% { opacity: 0; } }
 .streaming-cursor::after {
-    content: "▊"; animation: blink 0.8s infinite; color: #FF9933;
+    content: "▊";
+    animation: blink 0.8s infinite;
+    color: var(--cyan);
+    text-shadow: 0 0 8px var(--cyan-glow);
+    margin-left: 2px;
 }
 
 /* ── Thinking pulse animation ────────────────────────────────── */
@@ -287,14 +455,14 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
 
     /* Compact hero banner */
     .hero-banner {
-        padding: 1.2rem 1rem;
-        border-radius: 12px;
+        padding: 1.5rem 1.2rem;
+        border-radius: 16px;
         margin-bottom: 1rem;
         margin-top: 3.5rem;
     }
-    .hero-banner h1 { font-size: 1.3rem; }
+    .hero-banner h1 { font-size: 1.4rem; }
     .hero-banner p { font-size: 0.85rem; }
-    .hero-banner::before { font-size: 1.8rem; margin-bottom: 0.2rem; }
+    .hero-banner::before { font-size: 7rem; }
 
     /* Tricolor bar thinner */
     .tricolor-bar { height: 3px; margin-bottom: 0.6rem; }
@@ -333,12 +501,12 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
     }
 
     .hero-banner {
-        padding: 1rem 0.8rem;
-        border-radius: 10px;
+        padding: 1.2rem 1rem;
+        border-radius: 14px;
     }
-    .hero-banner h1 { font-size: 1.1rem; }
-    .hero-banner p { font-size: 0.8rem; }
-    .hero-banner::before { font-size: 1.5rem; }
+    .hero-banner h1 { font-size: 1.2rem; }
+    .hero-banner p { font-size: 0.78rem; }
+    .hero-banner::before { font-size: 5rem; }
 
     .stat-card .stat-num { font-size: 1rem; }
 
@@ -410,25 +578,52 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
 .bot-row  { justify-content: flex-start; }
 
 .avatar {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.2rem;
     flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    position: relative;
 }
 .user-avatar {
-    background: linear-gradient(135deg, #FF9933, #E07C24);
-    color: white;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--magenta) 100%);
+    color: var(--bg-deep);
+    border: 1px solid rgba(255, 184, 77, 0.50);
+    box-shadow:
+        0 0 20px -3px var(--gold-glow),
+        0 0 0 1px rgba(255, 184, 77, 0.20);
 }
 .bot-avatar {
-    background: linear-gradient(135deg, #1B1464, #0C2340);
-    color: #C8A84E;
-    border: 2px solid #C8A84E;
+    background:
+        linear-gradient(135deg, rgba(0, 229, 255, 0.20) 0%, rgba(177, 74, 237, 0.20) 100%),
+        var(--glass-strong);
+    color: var(--cyan);
+    border: 1px solid rgba(0, 229, 255, 0.40);
+    box-shadow:
+        0 0 24px -4px var(--cyan-glow),
+        0 0 0 1px rgba(0, 229, 255, 0.20);
+}
+/* Reactive AI presence — pulsing ring while streaming */
+.bot-row .bot-bubble.streaming-cursor + * .bot-avatar,
+.bot-row .bot-avatar {
+    transition: box-shadow 0.4s;
+}
+@keyframes ai-pulse {
+    0%, 100% { box-shadow: 0 0 24px -4px var(--cyan-glow), 0 0 0 0 rgba(0, 229, 255, 0.4); }
+    50%      { box-shadow: 0 0 30px 0 var(--cyan-glow), 0 0 0 6px rgba(0, 229, 255, 0); }
+}
+.bot-bubble.streaming-cursor {
+    animation: bubble-glow 2.5s ease-in-out infinite;
+}
+@keyframes bubble-glow {
+    0%, 100% { box-shadow: 0 0 30px -10px var(--cyan-glow), 0 8px 24px rgba(0, 0, 0, 0.35); }
+    50%      { box-shadow: 0 0 50px -5px var(--cyan-glow),  0 8px 28px rgba(0, 0, 0, 0.40); }
 }
 
 /* Override bubble margins inside msg rows */
@@ -438,139 +633,199 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
     max-width: 78%;
 }
 
-/* ── Markdown elements inside bot bubble ─────────────────────── */
+/* ── Markdown inside bot bubble — light text on glass ────────── */
 .bot-bubble h1, .bot-bubble h2, .bot-bubble h3, .bot-bubble h4 {
-    color: #1B1464;
-    margin: 0.6rem 0 0.4rem 0;
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    margin: 0.7rem 0 0.4rem 0;
     font-weight: 700;
+    letter-spacing: -0.01em;
 }
-.bot-bubble h1 { font-size: 1.25rem; border-bottom: 2px solid rgba(196,30,58,0.2); padding-bottom: 0.2rem; }
-.bot-bubble h2 { font-size: 1.1rem;  color: #C41E3A; }
-.bot-bubble h3 { font-size: 1rem; }
-.bot-bubble h4 { font-size: 0.95rem; color: #1B1464; }
-.bot-bubble strong { color: #C41E3A; font-weight: 700; }
-.bot-bubble em { color: #1B1464; }
+.bot-bubble h1 {
+    font-size: 1.25rem;
+    background: linear-gradient(135deg, var(--gold-bright), var(--cyan));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 0.3rem;
+}
+.bot-bubble h2 {
+    font-size: 1.1rem;
+    color: var(--gold-bright);
+    text-shadow: 0 0 20px var(--gold-glow);
+}
+.bot-bubble h3 { font-size: 1rem; color: var(--cyan); }
+.bot-bubble h4 { font-size: 0.95rem; color: var(--text-primary); }
+.bot-bubble strong { color: var(--gold-bright); font-weight: 700; }
+.bot-bubble em { color: var(--cyan); }
 .bot-bubble ul, .bot-bubble ol { padding-left: 1.4rem; margin: 0.4rem 0; }
-.bot-bubble li { margin: 0.25rem 0; line-height: 1.55; }
-.bot-bubble p { margin: 0.4rem 0; }
+.bot-bubble li { margin: 0.3rem 0; line-height: 1.55; }
+.bot-bubble li::marker { color: var(--gold); }
+.bot-bubble p { margin: 0.45rem 0; color: var(--text-primary); }
 .bot-bubble p:first-child { margin-top: 0; }
 .bot-bubble p:last-child { margin-bottom: 0; }
 .bot-bubble code {
-    background: rgba(27, 20, 100, 0.08);
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
+    background: rgba(0, 229, 255, 0.10);
+    padding: 0.1rem 0.45rem;
+    border-radius: 5px;
     font-size: 0.85em;
-    font-family: Menlo, Monaco, "Courier New", monospace;
-    color: #C41E3A;
+    font-family: 'JetBrains Mono', Menlo, Monaco, "Courier New", monospace;
+    color: var(--cyan);
+    border: 1px solid rgba(0, 229, 255, 0.20);
 }
 .bot-bubble pre {
-    background: rgba(27, 20, 100, 0.06);
-    padding: 0.8rem;
-    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 0.9rem;
+    border-radius: 10px;
     overflow-x: auto;
-    margin: 0.5rem 0;
-    border: 1px solid rgba(27, 20, 100, 0.1);
+    margin: 0.6rem 0;
+    border: 1px solid var(--glass-border);
 }
-.bot-bubble pre code { background: transparent; padding: 0; color: #1B1464; }
+.bot-bubble pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--text-primary);
+}
 .bot-bubble blockquote {
-    border-left: 3px solid #FF9933;
-    padding: 0.3rem 0.8rem;
-    margin: 0.5rem 0;
-    color: #555;
-    background: rgba(255, 153, 51, 0.06);
-    border-radius: 0 6px 6px 0;
+    border-left: 2px solid var(--gold);
+    padding: 0.35rem 0.9rem;
+    margin: 0.6rem 0;
+    color: var(--text-soft);
+    background: rgba(255, 184, 77, 0.06);
+    border-radius: 0 8px 8px 0;
 }
 .bot-bubble table {
     border-collapse: collapse;
-    margin: 0.5rem 0;
+    margin: 0.6rem 0;
     width: 100%;
     font-size: 0.85rem;
+    background: rgba(0, 0, 0, 0.20);
+    border-radius: 8px;
+    overflow: hidden;
 }
 .bot-bubble th, .bot-bubble td {
-    border: 1px solid rgba(27, 20, 100, 0.15);
-    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--glass-border);
+    padding: 0.45rem 0.7rem;
     text-align: left;
 }
-.bot-bubble th { background: rgba(255, 153, 51, 0.12); color: #1B1464; font-weight: 600; }
-.bot-bubble a { color: #C41E3A; text-decoration: underline; }
+.bot-bubble th {
+    background: rgba(255, 184, 77, 0.12);
+    color: var(--gold-bright);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+.bot-bubble a {
+    color: var(--cyan);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(0, 229, 255, 0.40);
+    transition: all 0.2s;
+}
+.bot-bubble a:hover {
+    color: var(--gold-bright);
+    border-bottom-color: var(--gold);
+    text-shadow: 0 0 8px var(--cyan-glow);
+}
 
-/* Markdown also for user bubble line breaks */
-.user-bubble p { margin: 0.2rem 0; }
+/* User bubble paragraph spacing */
+.user-bubble p { margin: 0.2rem 0; color: var(--text-primary); }
 .user-bubble p:first-child { margin-top: 0; }
 .user-bubble p:last-child { margin-bottom: 0; }
+.user-bubble strong { color: var(--gold-bright); }
 
-/* ── Copy button ─────────────────────────────────────────────── */
+/* ── Copy button — neon ───────────────────────────────────────── */
 .copy-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    margin-top: 0.7rem;
-    padding: 0.3rem 0.7rem;
-    background: rgba(27, 20, 100, 0.06);
-    color: #1B1464;
-    border: 1px solid rgba(27, 20, 100, 0.18);
-    border-radius: 6px;
+    margin-top: 0.8rem;
+    padding: 0.35rem 0.8rem;
+    background: var(--glass);
+    color: var(--cyan);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
     font-size: 0.72rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     font-family: 'Inter', sans-serif;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 .copy-btn:hover {
-    background: #FF9933;
-    color: white;
-    border-color: #FF9933;
+    background: rgba(0, 229, 255, 0.15);
+    color: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: 0 0 16px -4px var(--cyan-glow);
     transform: translateY(-1px);
 }
 .copy-btn:active { transform: translateY(0); }
 
-/* ── Disclaimer banner ───────────────────────────────────────── */
+/* ── Disclaimer banner — neon edge ───────────────────────────── */
 .disclaimer-banner {
-    background: linear-gradient(90deg, rgba(196,30,58,0.07), rgba(255,153,51,0.07));
-    border: 1px solid rgba(196,30,58,0.2);
-    border-left: 4px solid #C41E3A;
-    border-radius: 8px;
-    padding: 0.55rem 0.9rem;
-    margin-bottom: 0.8rem;
+    background:
+        linear-gradient(90deg, rgba(255, 61, 161, 0.08), rgba(255, 184, 77, 0.05) 50%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-left: 2px solid var(--magenta);
+    border-radius: 10px;
+    padding: 0.65rem 0.95rem;
+    margin-bottom: 1rem;
     font-size: 0.78rem;
-    color: #1B1464;
-    line-height: 1.4;
+    color: var(--text-soft);
+    line-height: 1.45;
+    box-shadow: 0 0 20px -8px rgba(255, 61, 161, 0.30);
 }
-.disclaimer-banner strong { color: #C41E3A; }
+.disclaimer-banner strong { color: var(--magenta); }
 
-/* ── Welcome example cards label ─────────────────────────────── */
+/* ── Welcome label ───────────────────────────────────────────── */
 .welcome-label {
     text-align: center;
-    color: #1B1464;
-    font-size: 0.85rem;
+    color: var(--cyan);
+    font-size: 0.78rem;
     font-weight: 600;
-    margin: 1rem 0 0.6rem 0;
+    margin: 1.4rem 0 0.8rem 0;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    opacity: 0.7;
+    letter-spacing: 0.18em;
+    text-shadow: 0 0 12px var(--cyan-glow);
 }
 
-/* Welcome state buttons styled as cards */
+/* ── Welcome cards — glowing glass tiles ─────────────────────── */
 .welcome-state .stButton > button {
-    min-height: 75px !important;
-    background: linear-gradient(135deg, #FFFFFF 0%, #FFF8F0 100%) !important;
-    border: 2px solid rgba(255, 153, 51, 0.25) !important;
-    color: #1B1464 !important;
-    border-radius: 14px !important;
+    min-height: 90px !important;
+    background:
+        linear-gradient(135deg, rgba(255, 184, 77, 0.06) 0%, rgba(0, 229, 255, 0.06) 100%),
+        var(--glass-strong) !important;
+    backdrop-filter: blur(16px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text-primary) !important;
+    border-radius: 16px !important;
     font-size: 0.85rem !important;
     font-weight: 600 !important;
     text-align: center !important;
-    padding: 0.8rem 0.6rem !important;
-    box-shadow: 0 2px 10px rgba(27,20,100,0.05) !important;
-    transition: all 0.2s !important;
-    line-height: 1.3 !important;
+    padding: 1rem 0.8rem !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.30) !important;
+    transition: all 0.3s ease !important;
+    line-height: 1.35 !important;
     white-space: normal !important;
+    position: relative !important;
 }
 .welcome-state .stButton > button:hover {
-    border-color: #FF9933 !important;
-    background: linear-gradient(135deg, #FFF8F0 0%, #FFE4C4 100%) !important;
-    transform: translateY(-2px) !important;
-    box-shadow: 0 6px 18px rgba(255,153,51,0.25) !important;
+    border-color: var(--gold) !important;
+    background:
+        linear-gradient(135deg, rgba(255, 184, 77, 0.18) 0%, rgba(0, 229, 255, 0.12) 100%),
+        var(--glass-strong) !important;
+    box-shadow:
+        0 0 30px -5px var(--gold-glow),
+        0 12px 32px rgba(0, 0, 0, 0.40) !important;
+    transform: translateY(-3px) !important;
+    color: var(--gold-bright) !important;
 }
 
 /* Mobile tweaks for new elements */
@@ -821,8 +1076,11 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        "<p style='color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center;'>"
-        "Powered by Gemini 2.5 Flash<br>Not a substitute for legal advice</p>",
+        "<p style='color:var(--text-dim); font-size:0.72rem; text-align:center; "
+        "letter-spacing:0.1em; text-transform:uppercase; font-weight:600;'>"
+        "⚡ Powered by Gemini<br>"
+        "<span style='font-size:0.65rem; opacity:0.7; text-transform:none; letter-spacing:normal;'>"
+        "Aether Neon · Legal AI</span></p>",
         unsafe_allow_html=True,
     )
 
