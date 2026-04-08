@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 import time
 import base64
@@ -157,6 +158,33 @@ def bot_bubble_html(content: str, streaming: bool = False) -> str:
         '<div class="avatar bot-avatar">⚖️</div>'
         f'<div class="bot-bubble{streaming_cls}">{body}{copy_html}</div>'
         '</div>'
+    )
+
+
+def scroll_to_bottom():
+    """Scroll the parent (Streamlit) page to the bottom.
+
+    st.markdown strips <script> tags, so we inject via components.html
+    which renders inside an iframe; we then walk up to window.parent
+    and scroll its document. The iframe itself is 0px tall so it's
+    invisible.
+    """
+    components.html(
+        """
+        <script>
+            const scroll = () => {
+                const doc = window.parent.document;
+                doc.documentElement.scrollTo({
+                    top: doc.documentElement.scrollHeight,
+                    behavior: 'smooth'
+                });
+            };
+            // Run twice — once immediately, once after layout settles.
+            scroll();
+            setTimeout(scroll, 250);
+        </script>
+        """,
+        height=0,
     )
 
 
@@ -322,9 +350,8 @@ with st.sidebar:
 # ── Disclaimer banner (always visible at top) ───────────────────────────────
 st.markdown(
     '<div class="disclaimer-banner">'
-    '<strong>⚠️ Legal Disclaimer:</strong> This AI assistant provides general legal information '
-    'about Indian law for educational purposes only. It is <strong>not a substitute</strong> for '
-    'advice from a qualified advocate. Always consult a licensed legal professional for specific cases.'
+    '<strong>⚠️ Disclaimer:</strong> Educational use only. '
+    '<strong>Not a substitute</strong> for advice from a qualified advocate.'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -377,31 +404,33 @@ for msg in st.session_state.messages:
     else:
         st.markdown(bot_bubble_html(msg["content"]), unsafe_allow_html=True)
 
+# Auto-scroll the page to the latest message after a normal render.
+# Skipped while streaming so the placeholder doesn't fight the scroll.
+if st.session_state.messages and not st.session_state.pending_response:
+    scroll_to_bottom()
+
 
 # ── Streaming helper ─────────────────────────────────────────────────────────
 
 def stream_and_display(messages_for_api: list[dict]) -> str:
     """Stream Gemini response with live display, return full text."""
-    loading = st.empty()
-    loading.markdown(
+    # Single placeholder for both loading state and streaming reply.
+    # Using one container avoids the flash/jump between two empty()s.
+    placeholder = st.empty()
+    placeholder.markdown(
         '<div class="msg-row bot-row">'
         '<div class="avatar bot-avatar">⚖️</div>'
-        '<div class="bot-bubble" style="opacity:0.75;">'
-        '<span style="color:#C8A84E;">⚖️ Thinking...</span></div>'
+        '<div class="bot-bubble" style="opacity:0.85;">'
+        '<span class="thinking-dots">Analyzing legal context</span></div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
-    placeholder = st.empty()
     full_response = ""
     start = time.time()
 
     try:
-        first_chunk = True
         for chunk in stream_response(API_KEY, SYSTEM_PROMPT, messages_for_api):
-            if first_chunk:
-                loading.empty()
-                first_chunk = False
             full_response += chunk
             placeholder.markdown(
                 bot_bubble_html(full_response, streaming=True),
@@ -414,7 +443,6 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
         return full_response
 
     except Exception as e:
-        loading.empty()
         elapsed = time.time() - start
         if full_response:
             placeholder.markdown(bot_bubble_html(full_response), unsafe_allow_html=True)
@@ -430,6 +458,10 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
 # the bottom of the chat — no inline duplication, no layout glitches.
 if st.session_state.pending_response and st.session_state.messages:
     chat_id = st.session_state.active_chat_id
+
+    # Scroll into view BEFORE the streaming starts so the user sees their
+    # just-submitted question and the loading bubble.
+    scroll_to_bottom()
 
     # Build API messages from full history
     api_messages = [
@@ -465,15 +497,15 @@ if (
     and st.session_state.messages[-1]["role"] == "assistant"
     and not st.session_state.pending_response
 ):
-    col_regen, col_cont, _ = st.columns([1, 1, 3])
+    col_regen, col_cont = st.columns(2)
     with col_regen:
-        if st.button("🔄 Regenerate", key="regen_btn"):
+        if st.button("🔄 Regenerate", key="regen_btn", use_container_width=True):
             # Drop last assistant reply, keep the user msg, queue regeneration
             st.session_state.messages.pop()
             st.session_state.pending_response = True
             st.rerun()
     with col_cont:
-        if st.button("➡️ Continue", key="cont_btn"):
+        if st.button("➡️ Continue", key="cont_btn", use_container_width=True):
             cont_text = "Continue your previous response. Do not repeat what you already said."
             st.session_state.messages.append({"role": "user", "content": cont_text})
             if st.session_state.active_chat_id:
