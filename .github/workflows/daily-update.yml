@@ -1,0 +1,38 @@
+name: Daily Dataset Update
+
+# Runs daily at 02:00 UTC (07:30 IST) to fetch fresh judgments
+# from Indian Kanoon RSS feeds and auto-commit any new entries.
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: # allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update-dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run daily RSS updater
+        run: python daily_update_rss.py
+
+      - name: Commit and push if dataset changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet Alpie-core_core_indian_law.json; then
+            echo "No changes to commit"
+          else
+            git add Alpie-core_core_indian_law.json
+            git commit -m "Auto-update: daily RSS scrape ($(date -u +%Y-%m-%d))"
+            git push
+          fi
