@@ -3,6 +3,8 @@ import json
 import time
 import base64
 import os
+import urllib.parse
+import markdown as md_lib
 from datetime import datetime
 
 from db import init_db, create_chat, get_all_chats, get_chat, get_messages
@@ -391,6 +393,195 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
         padding-bottom: env(safe-area-inset-bottom) !important;
     }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   ENHANCED UI: Avatars, Markdown, Copy, Welcome cards, Disclaimer
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Message rows with avatars ──────────────────────────────── */
+.msg-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin: 0.6rem 0;
+    width: 100%;
+}
+.user-row { justify-content: flex-end; }
+.bot-row  { justify-content: flex-start; }
+
+.avatar {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.user-avatar {
+    background: linear-gradient(135deg, #FF9933, #E07C24);
+    color: white;
+}
+.bot-avatar {
+    background: linear-gradient(135deg, #1B1464, #0C2340);
+    color: #C8A84E;
+    border: 2px solid #C8A84E;
+}
+
+/* Override bubble margins inside msg rows */
+.msg-row .user-bubble,
+.msg-row .bot-bubble {
+    margin: 0 !important;
+    max-width: 78%;
+}
+
+/* ── Markdown elements inside bot bubble ─────────────────────── */
+.bot-bubble h1, .bot-bubble h2, .bot-bubble h3, .bot-bubble h4 {
+    color: #1B1464;
+    margin: 0.6rem 0 0.4rem 0;
+    font-weight: 700;
+}
+.bot-bubble h1 { font-size: 1.25rem; border-bottom: 2px solid rgba(196,30,58,0.2); padding-bottom: 0.2rem; }
+.bot-bubble h2 { font-size: 1.1rem;  color: #C41E3A; }
+.bot-bubble h3 { font-size: 1rem; }
+.bot-bubble h4 { font-size: 0.95rem; color: #1B1464; }
+.bot-bubble strong { color: #C41E3A; font-weight: 700; }
+.bot-bubble em { color: #1B1464; }
+.bot-bubble ul, .bot-bubble ol { padding-left: 1.4rem; margin: 0.4rem 0; }
+.bot-bubble li { margin: 0.25rem 0; line-height: 1.55; }
+.bot-bubble p { margin: 0.4rem 0; }
+.bot-bubble p:first-child { margin-top: 0; }
+.bot-bubble p:last-child { margin-bottom: 0; }
+.bot-bubble code {
+    background: rgba(27, 20, 100, 0.08);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    color: #C41E3A;
+}
+.bot-bubble pre {
+    background: rgba(27, 20, 100, 0.06);
+    padding: 0.8rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 0.5rem 0;
+    border: 1px solid rgba(27, 20, 100, 0.1);
+}
+.bot-bubble pre code { background: transparent; padding: 0; color: #1B1464; }
+.bot-bubble blockquote {
+    border-left: 3px solid #FF9933;
+    padding: 0.3rem 0.8rem;
+    margin: 0.5rem 0;
+    color: #555;
+    background: rgba(255, 153, 51, 0.06);
+    border-radius: 0 6px 6px 0;
+}
+.bot-bubble table {
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    width: 100%;
+    font-size: 0.85rem;
+}
+.bot-bubble th, .bot-bubble td {
+    border: 1px solid rgba(27, 20, 100, 0.15);
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+}
+.bot-bubble th { background: rgba(255, 153, 51, 0.12); color: #1B1464; font-weight: 600; }
+.bot-bubble a { color: #C41E3A; text-decoration: underline; }
+
+/* Markdown also for user bubble line breaks */
+.user-bubble p { margin: 0.2rem 0; }
+.user-bubble p:first-child { margin-top: 0; }
+.user-bubble p:last-child { margin-bottom: 0; }
+
+/* ── Copy button ─────────────────────────────────────────────── */
+.copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.7rem;
+    padding: 0.3rem 0.7rem;
+    background: rgba(27, 20, 100, 0.06);
+    color: #1B1464;
+    border: 1px solid rgba(27, 20, 100, 0.18);
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+}
+.copy-btn:hover {
+    background: #FF9933;
+    color: white;
+    border-color: #FF9933;
+    transform: translateY(-1px);
+}
+.copy-btn:active { transform: translateY(0); }
+
+/* ── Disclaimer banner ───────────────────────────────────────── */
+.disclaimer-banner {
+    background: linear-gradient(90deg, rgba(196,30,58,0.07), rgba(255,153,51,0.07));
+    border: 1px solid rgba(196,30,58,0.2);
+    border-left: 4px solid #C41E3A;
+    border-radius: 8px;
+    padding: 0.55rem 0.9rem;
+    margin-bottom: 0.8rem;
+    font-size: 0.78rem;
+    color: #1B1464;
+    line-height: 1.4;
+}
+.disclaimer-banner strong { color: #C41E3A; }
+
+/* ── Welcome example cards label ─────────────────────────────── */
+.welcome-label {
+    text-align: center;
+    color: #1B1464;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 1rem 0 0.6rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+}
+
+/* Welcome state buttons styled as cards */
+.welcome-state .stButton > button {
+    min-height: 75px !important;
+    background: linear-gradient(135deg, #FFFFFF 0%, #FFF8F0 100%) !important;
+    border: 2px solid rgba(255, 153, 51, 0.25) !important;
+    color: #1B1464 !important;
+    border-radius: 14px !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    padding: 0.8rem 0.6rem !important;
+    box-shadow: 0 2px 10px rgba(27,20,100,0.05) !important;
+    transition: all 0.2s !important;
+    line-height: 1.3 !important;
+    white-space: normal !important;
+}
+.welcome-state .stButton > button:hover {
+    border-color: #FF9933 !important;
+    background: linear-gradient(135deg, #FFF8F0 0%, #FFE4C4 100%) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 18px rgba(255,153,51,0.25) !important;
+}
+
+/* Mobile tweaks for new elements */
+@media (max-width: 768px) {
+    .avatar { width: 32px; height: 32px; min-width: 32px; font-size: 1rem; }
+    .msg-row { gap: 0.4rem; }
+    .msg-row .user-bubble,
+    .msg-row .bot-bubble { max-width: 82%; }
+    .disclaimer-banner { font-size: 0.72rem; padding: 0.45rem 0.7rem; }
+    .welcome-state .stButton > button { min-height: 65px !important; font-size: 0.78rem !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -425,6 +616,59 @@ SYSTEM_PROMPT = (
     "Always provide complete, thorough responses. Do not cut off mid-sentence.\n\n"
     "Dataset Context:\n" + dataset_context
 )
+
+# ── Markdown + bubble rendering helpers ─────────────────────────────────────
+import html as _html
+
+
+def md_to_html(text: str, safe: bool = True) -> str:
+    """Convert markdown text to HTML for embedding in chat bubbles.
+
+    safe=True escapes raw HTML first (use for user input).
+    safe=False trusts the input (use for LLM output that we want fully formatted).
+    """
+    if safe:
+        text = _html.escape(text)
+    return md_lib.markdown(
+        text,
+        extensions=["fenced_code", "tables", "nl2br", "sane_lists"],
+    )
+
+
+def _copy_button(content: str) -> str:
+    """Render a small 'Copy' button that copies the original plain text."""
+    encoded = urllib.parse.quote(content)
+    return (
+        '<button class="copy-btn" '
+        f'onclick="navigator.clipboard.writeText(decodeURIComponent(\'{encoded}\'));'
+        "this.innerText='✓ Copied';"
+        "setTimeout(()=>this.innerText='📋 Copy',1800);\">"
+        "📋 Copy</button>"
+    )
+
+
+def user_bubble_html(content: str) -> str:
+    body = md_to_html(content, safe=True)
+    return (
+        '<div class="msg-row user-row">'
+        f'<div class="user-bubble">{body}</div>'
+        '<div class="avatar user-avatar">👤</div>'
+        '</div>'
+    )
+
+
+def bot_bubble_html(content: str, streaming: bool = False) -> str:
+    # Escape HTML first to prevent any raw <script> from LLM output (defense-in-depth)
+    body = md_to_html(content, safe=True) if content else ""
+    streaming_cls = " streaming-cursor" if streaming else ""
+    copy_html = _copy_button(content) if (content and not streaming) else ""
+    return (
+        '<div class="msg-row bot-row">'
+        '<div class="avatar bot-avatar">⚖️</div>'
+        f'<div class="bot-bubble{streaming_cls}">{body}{copy_html}</div>'
+        '</div>'
+    )
+
 
 # ── Session state init ───────────────────────────────────────────────────────
 if "active_chat_id" not in st.session_state:
@@ -541,7 +785,17 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-# ── Hero Banner (only when no messages) ──────────────────────────────────────
+# ── Disclaimer banner (always visible at top) ───────────────────────────────
+st.markdown(
+    '<div class="disclaimer-banner">'
+    '<strong>⚠️ Legal Disclaimer:</strong> This AI assistant provides general legal information '
+    'about Indian law for educational purposes only. It is <strong>not a substitute</strong> for '
+    'advice from a qualified advocate. Always consult a licensed legal professional for specific cases.'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+# ── Hero Banner + Welcome Cards (only when no messages) ─────────────────────
 if not st.session_state.messages:
     st.markdown(
         """
@@ -555,12 +809,39 @@ if not st.session_state.messages:
         unsafe_allow_html=True,
     )
 
+    st.markdown('<p class="welcome-label">💡 Try asking about</p>', unsafe_allow_html=True)
+    st.markdown('<div class="welcome-state">', unsafe_allow_html=True)
+
+    welcome_examples = [
+        ("⚖️", "Fundamental Rights",
+         "What are the Fundamental Rights guaranteed by the Indian Constitution?"),
+        ("📜", "Article 21",
+         "Explain Article 21 of the Indian Constitution and the right to life and liberty."),
+        ("🚨", "How to file an FIR",
+         "What is the step-by-step procedure to file an FIR in India?"),
+        ("💍", "Divorce process",
+         "What is the legal process for filing for divorce in India?"),
+        ("🏠", "Property inheritance",
+         "What are the property inheritance rights for daughters under Hindu law?"),
+        ("💼", "Workplace harassment",
+         "What legal protections exist against sexual harassment at the workplace in India?"),
+    ]
+
+    cols = st.columns(3)
+    for i, (icon, label, q) in enumerate(welcome_examples):
+        with cols[i % 3]:
+            if st.button(f"{icon}\n\n{label}", key=f"welcome_{i}", use_container_width=True):
+                st.session_state.pending_topic = q
+                st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # ── Render chat history ─────────────────────────────────────────────────────
 for i, msg in enumerate(st.session_state.messages):
     if msg["role"] == "user":
-        st.markdown(f'<div class="user-bubble">{msg["content"]}</div>', unsafe_allow_html=True)
+        st.markdown(user_bubble_html(msg["content"]), unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="bot-bubble">{msg["content"]}</div>', unsafe_allow_html=True)
+        st.markdown(bot_bubble_html(msg["content"]), unsafe_allow_html=True)
 
 # ── Regenerate & Continue buttons (after last assistant message) ─────────────
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
@@ -585,11 +866,14 @@ active_prompt = prompt or pending
 
 def stream_and_display(messages_for_api: list[dict]) -> str:
     """Stream Gemini response with live display, return full text."""
-    # Show loading indicator immediately
+    # Show loading indicator immediately (with avatar layout)
     loading = st.empty()
     loading.markdown(
-        '<div class="bot-bubble" style="opacity:0.7;">'
-        '<span style="color:#C8A84E;">⚖️ Thinking...</span></div>',
+        '<div class="msg-row bot-row">'
+        '<div class="avatar bot-avatar">⚖️</div>'
+        '<div class="bot-bubble" style="opacity:0.75;">'
+        '<span style="color:#C8A84E;">⚖️ Thinking...</span></div>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
@@ -605,16 +889,16 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
                 first_chunk = False
             full_response += chunk
             placeholder.markdown(
-                f'<div class="bot-bubble streaming-cursor">{full_response}</div>',
+                bot_bubble_html(full_response, streaming=True),
                 unsafe_allow_html=True,
             )
 
         elapsed = time.time() - start
         placeholder.markdown(
-            f'<div class="bot-bubble">{full_response}</div>',
+            bot_bubble_html(full_response),
             unsafe_allow_html=True,
         )
-        st.caption(f"Response time: {elapsed:.1f}s")
+        st.caption(f"⏱️ Response time: {elapsed:.1f}s")
         return full_response
 
     except Exception as e:
@@ -622,7 +906,7 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
         elapsed = time.time() - start
         if full_response:
             placeholder.markdown(
-                f'<div class="bot-bubble">{full_response}</div>',
+                bot_bubble_html(full_response),
                 unsafe_allow_html=True,
             )
             st.warning(f"Response may be incomplete ({elapsed:.1f}s). Click 'Continue' to extend.")
@@ -645,7 +929,7 @@ if active_prompt:
     # Save user message
     st.session_state.messages.append({"role": "user", "content": active_prompt})
     append_message(chat_id, "user", active_prompt)
-    st.markdown(f'<div class="user-bubble">{active_prompt}</div>', unsafe_allow_html=True)
+    st.markdown(user_bubble_html(active_prompt), unsafe_allow_html=True)
 
     # Build context-aware messages for API (full history)
     api_messages = [{"role": "user", "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"]}]
