@@ -141,7 +141,8 @@ section[data-testid="stSidebar"] hr {
     to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
 .hero-banner > * { position: relative; z-index: 1; }
-.hero-banner h1 {
+.hero-banner h1,
+.hero-banner .hero-title > span {
     font-family: 'Space Grotesk', 'Inter', sans-serif;
     background: linear-gradient(135deg, var(--gold-bright) 0%, var(--cyan) 100%);
     -webkit-background-clip: text;
@@ -152,6 +153,7 @@ section[data-testid="stSidebar"] hr {
     letter-spacing: -0.02em;
     margin: 0;
     text-shadow: 0 0 40px var(--gold-glow);
+    line-height: 1.1;
 }
 .hero-banner p {
     color: var(--text-soft);
@@ -1039,38 +1041,34 @@ section[data-testid="stSidebar"] .stButton:first-of-type > button:hover .iconv {
    override the default H1 line-height which was pushing the SVG below
    the text baseline. !important is needed because .hero-banner h1 has
    higher specificity from earlier in this file. */
-.hero-banner h1.hero-title {
-    display: inline-flex !important;
-    align-items: center !important;
+/* The hero title is now a <div role="heading" aria-level="1"> instead of
+   an <h1>. Streamlit auto-attaches a permalink anchor next to actual
+   heading elements rendered via st.markdown — using a <div> with an ARIA
+   heading role keeps the semantics for screen readers but stops the
+   chain-link icon from ever being injected. */
+.hero-banner .hero-title {
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-    gap: 0.7rem;
-    line-height: 1 !important;
-    width: auto;
-}
-.hero-banner .hero-title > span {
-    display: inline-block;
-    line-height: 1.1;
-    /* The gradient text-fill on the H1 also tries to clip the SVG;
-       wrapping the label in <span> means only the span gets the
-       gradient, and the SVG keeps its own currentColor. */
+    gap: 0.75rem;
+    line-height: 1;
+    margin: 0;
 }
 .hero-banner .hero-title .iconv {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     color: var(--gold-bright);
     filter: drop-shadow(0 0 14px var(--gold-glow));
     flex-shrink: 0;
-    /* The SVG is its own block in the flex row — no baseline alignment */
     -webkit-text-fill-color: var(--gold-bright);
 }
 
-/* Streamlit auto-injects a permalink anchor (chain icon) next to every
-   heading rendered via st.markdown. Hide it inside the hero banner —
-   our title is decorative, not a section anchor. */
-.hero-banner h1 a,
-.hero-banner h1 [data-testid="stHeaderActionElements"],
-.hero-banner h1 .anchor-link,
-.hero-banner h1 [aria-label*="link"] {
+/* Belt-and-braces: hide any anchor link Streamlit may still try to
+   inject anywhere inside the hero banner (covers both old and future
+   class names). */
+.hero-banner a[href^="#"],
+.hero-banner [data-testid*="HeaderAction"],
+.hero-banner .anchor-link {
     display: none !important;
 }
 
