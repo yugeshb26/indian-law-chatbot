@@ -405,9 +405,7 @@ if not st.session_state.messages:
         f"""
         <div class="tricolor-bar"></div>
         <div class="hero-banner">
-            <div class="hero-title" role="heading" aria-level="1">
-                {icon("scale", size=30)}<span>Indian Law Assistant</span>
-            </div>
+            <h1 class="hero-title">{icon("scale", size=30)}<span>Indian Law Assistant</span></h1>
             <p>Ask me anything about Indian laws, acts, constitutional provisions, or legal rights</p>
         </div>
         <div class="tricolor-bar"></div>
