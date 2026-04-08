@@ -671,10 +671,37 @@ def bot_bubble_html(content: str, streaming: bool = False) -> str:
 
 
 # ── Session state init ───────────────────────────────────────────────────────
-if "active_chat_id" not in st.session_state:
-    st.session_state.active_chat_id = None
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# Defaults for all session keys we use (avoids KeyError edge cases)
+for _key, _default in [
+    ("active_chat_id", None),
+    ("messages", []),
+    ("pending_response", False),  # True while we still need to stream a reply
+]:
+    if _key not in st.session_state:
+        st.session_state[_key] = _default
+
+# ── Restore active chat from URL query params (survives reconnects) ─────────
+# On Render free tier the app sleeps; when it wakes the WebSocket reconnects
+# with a fresh session, dropping in-memory state. Persisting the active chat
+# ID in the URL means we can recover it after a reload/reconnect so the user
+# does NOT get a brand-new chat row for every question.
+_qp_chat = st.query_params.get("chat")
+if _qp_chat and st.session_state.active_chat_id is None:
+    _existing = get_chat(_qp_chat)
+    if _existing:
+        st.session_state.active_chat_id = _qp_chat
+        _db_msgs = get_messages(_qp_chat)
+        st.session_state.messages = [
+            {"role": m["role"], "content": m["content"]} for m in _db_msgs
+        ]
+
+
+def _sync_url():
+    """Reflect the active chat in the URL so it survives reconnects."""
+    if st.session_state.active_chat_id:
+        st.query_params["chat"] = st.session_state.active_chat_id
+    else:
+        st.query_params.clear()
 
 
 def load_chat(chat_id: str):
@@ -682,12 +709,26 @@ def load_chat(chat_id: str):
     st.session_state.active_chat_id = chat_id
     db_msgs = get_messages(chat_id)
     st.session_state.messages = [{"role": m["role"], "content": m["content"]} for m in db_msgs]
+    st.session_state.pending_response = False
+    _sync_url()
 
 
 def start_new_chat():
     """Create a fresh chat."""
     st.session_state.active_chat_id = None
     st.session_state.messages = []
+    st.session_state.pending_response = False
+    _sync_url()
+
+
+def submit_user_input(text: str):
+    """Save a new user message and queue a response. Caller should rerun."""
+    if not st.session_state.active_chat_id:
+        st.session_state.active_chat_id = create_chat("New Chat")
+        _sync_url()
+    st.session_state.messages.append({"role": "user", "content": text})
+    append_message(st.session_state.active_chat_id, "user", text)
+    st.session_state.pending_response = True
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -775,7 +816,7 @@ with st.sidebar:
     ]
     for icon, label, question in topics:
         if st.button(f"{icon}  {label}", key=f"topic_{label}", use_container_width=True):
-            st.session_state.pending_topic = question
+            submit_user_input(question)
             st.rerun()
 
     st.markdown("---")
@@ -831,42 +872,23 @@ if not st.session_state.messages:
     for i, (icon, label, q) in enumerate(welcome_examples):
         with cols[i % 3]:
             if st.button(f"{icon}\n\n{label}", key=f"welcome_{i}", use_container_width=True):
-                st.session_state.pending_topic = q
+                submit_user_input(q)
                 st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ── Render chat history ─────────────────────────────────────────────────────
-for i, msg in enumerate(st.session_state.messages):
+for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.markdown(user_bubble_html(msg["content"]), unsafe_allow_html=True)
     else:
         st.markdown(bot_bubble_html(msg["content"]), unsafe_allow_html=True)
 
-# ── Regenerate & Continue buttons (after last assistant message) ─────────────
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
-    col_regen, col_cont, _ = st.columns([1, 1, 3])
-    with col_regen:
-        regen_clicked = st.button("🔄 Regenerate", key="regen_btn")
-    with col_cont:
-        cont_clicked = st.button("➡️ Continue", key="cont_btn")
-else:
-    regen_clicked = False
-    cont_clicked = False
 
-# ── Handle quick topic clicks ────────────────────────────────────────────────
-pending = st.session_state.pop("pending_topic", None)
-
-# ── Chat input ───────────────────────────────────────────────────────────────
-prompt = st.chat_input("Ask anything about Indian law...")
-active_prompt = prompt or pending
-
-
-# ── Process: New message / Regenerate / Continue ─────────────────────────────
+# ── Streaming helper ─────────────────────────────────────────────────────────
 
 def stream_and_display(messages_for_api: list[dict]) -> str:
     """Stream Gemini response with live display, return full text."""
-    # Show loading indicator immediately (with avatar layout)
     loading = st.empty()
     loading.markdown(
         '<div class="msg-row bot-row">'
@@ -885,7 +907,7 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
         first_chunk = True
         for chunk in stream_response(API_KEY, SYSTEM_PROMPT, messages_for_api):
             if first_chunk:
-                loading.empty()  # Remove "Thinking..." once streaming starts
+                loading.empty()
                 first_chunk = False
             full_response += chunk
             placeholder.markdown(
@@ -894,10 +916,7 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
             )
 
         elapsed = time.time() - start
-        placeholder.markdown(
-            bot_bubble_html(full_response),
-            unsafe_allow_html=True,
-        )
+        placeholder.markdown(bot_bubble_html(full_response), unsafe_allow_html=True)
         st.caption(f"⏱️ Response time: {elapsed:.1f}s")
         return full_response
 
@@ -905,80 +924,74 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
         loading.empty()
         elapsed = time.time() - start
         if full_response:
-            placeholder.markdown(
-                bot_bubble_html(full_response),
-                unsafe_allow_html=True,
-            )
+            placeholder.markdown(bot_bubble_html(full_response), unsafe_allow_html=True)
             st.warning(f"Response may be incomplete ({elapsed:.1f}s). Click 'Continue' to extend.")
             return full_response
-        else:
-            placeholder.empty()
-            st.error(f"Failed to get response: {str(e)[:200]}")
-            return ""
+        placeholder.empty()
+        st.error(f"Failed to get response: {str(e)[:200]}")
+        return ""
 
 
-if active_prompt:
-    # ── New user message ─────────────────────────────────────────────────────
-    # Create chat in DB if this is a new conversation
-    if not st.session_state.active_chat_id:
-        chat_id = create_chat("New Chat")
-        st.session_state.active_chat_id = chat_id
-    else:
-        chat_id = st.session_state.active_chat_id
-
-    # Save user message
-    st.session_state.messages.append({"role": "user", "content": active_prompt})
-    append_message(chat_id, "user", active_prompt)
-    st.markdown(user_bubble_html(active_prompt), unsafe_allow_html=True)
-
-    # Build context-aware messages for API (full history)
-    api_messages = [{"role": "user", "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"]}]
-    for m in st.session_state.messages[1:]:
-        api_messages.append(m)
-
-    # Stream response
-    reply = stream_and_display(api_messages)
-
-    if reply:
-        st.session_state.messages.append({"role": "assistant", "content": reply})
-        append_message(chat_id, "assistant", reply)
-
-        # Auto-generate title from first question
-        if len(get_messages(chat_id)) <= 2:
-            title = generate_title(API_KEY, active_prompt)
-            update_chat_title(chat_id, title)
-
-elif regen_clicked and st.session_state.messages:
-    # ── Regenerate last response ─────────────────────────────────────────────
+# ── Stream a pending response (set by previous turn's user input) ───────────
+# This block runs AFTER history rendering, so the streamed reply lands at
+# the bottom of the chat — no inline duplication, no layout glitches.
+if st.session_state.pending_response and st.session_state.messages:
     chat_id = st.session_state.active_chat_id
-    # Remove last assistant message
-    st.session_state.messages.pop()
 
-    api_messages = [{"role": "user", "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"]}]
+    # Build API messages from full history
+    api_messages = [
+        {
+            "role": "user",
+            "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"],
+        }
+    ]
     for m in st.session_state.messages[1:]:
         api_messages.append(m)
 
     reply = stream_and_display(api_messages)
+
     if reply:
         st.session_state.messages.append({"role": "assistant", "content": reply})
         if chat_id:
             append_message(chat_id, "assistant", reply)
+            # Auto-generate title from first user question
+            if len(st.session_state.messages) == 2:
+                try:
+                    title = generate_title(API_KEY, st.session_state.messages[0]["content"])
+                    update_chat_title(chat_id, title)
+                except Exception:
+                    pass  # title is non-critical
 
-elif cont_clicked and st.session_state.messages:
-    # ── Continue last response ───────────────────────────────────────────────
-    chat_id = st.session_state.active_chat_id
-    # Add a continue request
-    cont_msg = {"role": "user", "content": "Continue your response. Do not repeat what you already said."}
-    st.session_state.messages.append(cont_msg)
-    if chat_id:
-        append_message(chat_id, "user", cont_msg["content"])
+    st.session_state.pending_response = False
+    st.rerun()
 
-    api_messages = [{"role": "user", "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"]}]
-    for m in st.session_state.messages[1:]:
-        api_messages.append(m)
 
-    reply = stream_and_display(api_messages)
-    if reply:
-        st.session_state.messages.append({"role": "assistant", "content": reply})
-        if chat_id:
-            append_message(chat_id, "assistant", reply)
+# ── Action buttons (only when last message is assistant & nothing pending) ──
+if (
+    st.session_state.messages
+    and st.session_state.messages[-1]["role"] == "assistant"
+    and not st.session_state.pending_response
+):
+    col_regen, col_cont, _ = st.columns([1, 1, 3])
+    with col_regen:
+        if st.button("🔄 Regenerate", key="regen_btn"):
+            # Drop last assistant reply, keep the user msg, queue regeneration
+            st.session_state.messages.pop()
+            st.session_state.pending_response = True
+            st.rerun()
+    with col_cont:
+        if st.button("➡️ Continue", key="cont_btn"):
+            cont_text = "Continue your previous response. Do not repeat what you already said."
+            st.session_state.messages.append({"role": "user", "content": cont_text})
+            if st.session_state.active_chat_id:
+                append_message(st.session_state.active_chat_id, "user", cont_text)
+            st.session_state.pending_response = True
+            st.rerun()
+
+
+# ── Chat input ──────────────────────────────────────────────────────────────
+prompt = st.chat_input("Ask anything about Indian law...")
+
+if prompt and not st.session_state.pending_response:
+    submit_user_input(prompt)
+    st.rerun()
