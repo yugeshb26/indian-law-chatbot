@@ -26,12 +26,56 @@
 
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: var(--text-primary); }
 #MainMenu, footer, header { visibility: hidden; }
-.stApp { background: transparent; }
+
+/* ── Force dark base on every Streamlit container ─────────────── */
+/* Defensive: even if config.toml theme isn't picked up, never let
+   Streamlit's default light backgrounds bleed through. */
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stHeader"] {
+    background: var(--bg-deep) !important;
+    color: var(--text-primary) !important;
+}
+[data-testid="stMain"] {
+    background-color: var(--bg-deep) !important;
+}
+[data-testid="stMainBlockContainer"],
+.main .block-container,
+.stMainBlockContainer {
+    background: transparent !important;
+    color: var(--text-primary) !important;
+}
 
 /* Override Streamlit text colors for dark theme */
 .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span,
-.stCaption, [data-testid="stCaptionContainer"] {
+.stCaption, [data-testid="stCaptionContainer"],
+.stText, [data-testid="stText"],
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li {
     color: var(--text-soft) !important;
+}
+
+/* Ensure headings in main content area are visible */
+[data-testid="stMain"] h1,
+[data-testid="stMain"] h2,
+[data-testid="stMain"] h3,
+[data-testid="stMain"] h4 {
+    color: var(--text-primary) !important;
+}
+
+/* Streamlit warning/error/info banners — keep them dark too */
+[data-testid="stAlert"] {
+    background: var(--glass-strong) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 12px !important;
+}
+
+/* Streamlit wraps button labels in <p>; force inheritance */
+.stButton button p,
+.stButton button span,
+.stButton button div {
+    color: inherit !important;
 }
 
 /* ── Sidebar — Cyber-glass dark panel ────────────────────────── */
@@ -697,20 +741,20 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
 /* ── Disclaimer banner — neon edge ───────────────────────────── */
 .disclaimer-banner {
     background:
-        linear-gradient(90deg, rgba(255, 61, 161, 0.08), rgba(255, 184, 77, 0.05) 50%, transparent);
+        linear-gradient(90deg, rgba(255, 61, 161, 0.12), rgba(255, 184, 77, 0.08) 50%, rgba(11, 14, 39, 0.4)) !important;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-left: 2px solid var(--magenta);
     border-radius: 10px;
-    padding: 0.65rem 0.95rem;
+    padding: 0.7rem 1rem;
     margin-bottom: 1rem;
-    font-size: 0.78rem;
-    color: var(--text-soft);
-    line-height: 1.45;
+    font-size: 0.8rem;
+    color: var(--text-primary) !important;
+    line-height: 1.5;
     box-shadow: 0 0 20px -8px rgba(255, 61, 161, 0.30);
 }
-.disclaimer-banner strong { color: var(--magenta); }
+.disclaimer-banner strong { color: var(--magenta) !important; font-weight: 700; }
 
 /* ── Welcome label ───────────────────────────────────────────── */
 .welcome-label {
@@ -725,17 +769,18 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
 }
 
 /* ── Welcome cards — glowing glass tiles ─────────────────────── */
-.welcome-state .stButton > button {
+/* Target by Streamlit's auto-generated key class (.st-key-welcome_0 etc.) */
+[class*="st-key-welcome_"] button {
     min-height: 90px !important;
     background:
-        linear-gradient(135deg, rgba(255, 184, 77, 0.06) 0%, rgba(0, 229, 255, 0.06) 100%),
+        linear-gradient(135deg, rgba(255, 184, 77, 0.10) 0%, rgba(0, 229, 255, 0.10) 100%),
         var(--glass-strong) !important;
     backdrop-filter: blur(16px) saturate(160%) !important;
     -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
     border: 1px solid var(--glass-border) !important;
     color: var(--text-primary) !important;
     border-radius: 16px !important;
-    font-size: 0.85rem !important;
+    font-size: 0.88rem !important;
     font-weight: 600 !important;
     text-align: center !important;
     padding: 1rem 0.8rem !important;
@@ -745,16 +790,19 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
     white-space: normal !important;
     position: relative !important;
 }
-.welcome-state .stButton > button:hover {
+[class*="st-key-welcome_"] button:hover {
     border-color: var(--gold) !important;
     background:
-        linear-gradient(135deg, rgba(255, 184, 77, 0.18) 0%, rgba(0, 229, 255, 0.12) 100%),
+        linear-gradient(135deg, rgba(255, 184, 77, 0.22) 0%, rgba(0, 229, 255, 0.16) 100%),
         var(--glass-strong) !important;
     box-shadow:
         0 0 30px -5px var(--gold-glow),
         0 12px 32px rgba(0, 0, 0, 0.40) !important;
     transform: translateY(-3px) !important;
     color: var(--gold-bright) !important;
+}
+[class*="st-key-welcome_"] button p {
+    color: inherit !important;
 }
 
 /* Mobile tweaks for new elements */
@@ -764,5 +812,5 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
     .msg-row .user-bubble,
     .msg-row .bot-bubble { max-width: 82%; }
     .disclaimer-banner { font-size: 0.72rem; padding: 0.45rem 0.7rem; }
-    .welcome-state .stButton > button { min-height: 65px !important; font-size: 0.78rem !important; }
+    [class*="st-key-welcome_"] button { min-height: 70px !important; font-size: 0.78rem !important; }
 }
