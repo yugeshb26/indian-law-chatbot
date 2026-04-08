@@ -11,6 +11,7 @@ from datetime import datetime
 from db import init_db, create_chat, get_all_chats, get_chat, get_messages
 from db import append_message, update_chat_title, delete_chat
 from gemini_engine import stream_response, regenerate_response, generate_title, init_rotator
+from icons import icon
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # API keys: try environment variable first (Render), then Streamlit secrets
@@ -129,12 +130,20 @@ def md_to_html(text: str, safe: bool = True) -> str:
 def _copy_button(content: str) -> str:
     """Render a small 'Copy' button that copies the original plain text."""
     encoded = urllib.parse.quote(content)
+    # Pre-built SVG markup so we can swap them in/out from JS without re-rendering.
+    # The original (default) state shows the copy icon + "Copy" label.
+    copy_icon = icon("copy", size=14)
+    check_icon = icon("check", size=14)
+    # Escape backticks/single quotes in the JS payload to keep onclick valid.
+    js = (
+        f"navigator.clipboard.writeText(decodeURIComponent('{encoded}'));"
+        f"this.innerHTML=`{check_icon}<span>Copied</span>`;"
+        f"setTimeout(()=>this.innerHTML=`{copy_icon}<span>Copy</span>`,1800);"
+    )
     return (
-        '<button class="copy-btn" '
-        f'onclick="navigator.clipboard.writeText(decodeURIComponent(\'{encoded}\'));'
-        "this.innerText='✓ Copied';"
-        "setTimeout(()=>this.innerText='📋 Copy',1800);\">"
-        "📋 Copy</button>"
+        f'<button class="copy-btn" onclick="{js}">'
+        f'{copy_icon}<span>Copy</span>'
+        f'</button>'
     )
 
 
@@ -143,7 +152,7 @@ def user_bubble_html(content: str) -> str:
     return (
         '<div class="msg-row user-row">'
         f'<div class="user-bubble">{body}</div>'
-        '<div class="avatar user-avatar">👤</div>'
+        f'<div class="avatar user-avatar">{icon("user", size=20)}</div>'
         '</div>'
     )
 
@@ -155,7 +164,7 @@ def bot_bubble_html(content: str, streaming: bool = False) -> str:
     copy_html = _copy_button(content) if (content and not streaming) else ""
     return (
         '<div class="msg-row bot-row">'
-        '<div class="avatar bot-avatar">⚖️</div>'
+        f'<div class="avatar bot-avatar">{icon("scale", size=22)}</div>'
         f'<div class="bot-bubble{streaming_cls}">{body}{copy_html}</div>'
         '</div>'
     )
@@ -251,16 +260,23 @@ def submit_user_input(text: str):
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## ⚖️ Indian Law Bot")
     st.markdown(
-        "<p style='color:rgba(255,255,255,0.7); font-size:0.85rem;'>"
+        f'<div class="sidebar-brand">{icon("scale", size=22)}<span>Indian Law Bot</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<p style='color:rgba(255,255,255,0.7); font-size:0.85rem; margin:0 0 0.6rem 0;'>"
         "Your AI-powered legal assistant</p>",
         unsafe_allow_html=True,
     )
     st.markdown("---")
 
-    # New Chat button
-    if st.button("✨  New Chat", key="new_chat", use_container_width=True):
+    # New Chat button — Streamlit doesn't accept HTML in button labels, so we
+    # use the built-in `icon` parameter to ship a Material Symbols glyph.
+    # Material Symbols is the same icon family used by modern SaaS dashboards
+    # and renders as a clean, consistent vector across all platforms.
+    if st.button("New Chat", key="new_chat", use_container_width=True,
+                 icon=":material/add_circle:"):
         start_new_chat()
         st.rerun()
 
@@ -287,7 +303,11 @@ with st.sidebar:
     st.markdown("---")
 
     # Chat History List
-    st.markdown("### Chat History")
+    st.markdown(
+        f'<div class="sidebar-section-label">{icon("history", size=14)}'
+        f'<span>Chat History</span></div>',
+        unsafe_allow_html=True,
+    )
     if not all_chats:
         st.markdown(
             "<p style='color:rgba(255,255,255,0.4); font-size:0.8rem;'>No chats yet. Start asking!</p>",
@@ -296,25 +316,30 @@ with st.sidebar:
     else:
         for chat in all_chats:
             is_active = chat["chat_id"] == st.session_state.active_chat_id
-            active_cls = " active" if is_active else ""
             try:
                 dt = datetime.fromisoformat(chat["updated_at"])
                 date_str = dt.strftime("%b %d, %I:%M %p")
             except Exception:
                 date_str = chat["updated_at"][:16]
 
-            # Each chat is a button
+            # Each chat row: title button + delete button
             col_btn, col_del = st.columns([5, 1])
             with col_btn:
                 if st.button(
-                    f"💬 {chat['title'][:30]}",
+                    chat["title"][:30],
                     key=f"chat_{chat['chat_id']}",
                     use_container_width=True,
+                    icon=":material/chat_bubble:",
                 ):
                     load_chat(chat["chat_id"])
                     st.rerun()
             with col_del:
-                if st.button("🗑", key=f"del_{chat['chat_id']}"):
+                if st.button(
+                    "",
+                    key=f"del_{chat['chat_id']}",
+                    icon=":material/delete:",
+                    help="Delete this chat",
+                ):
                     delete_chat(chat["chat_id"])
                     if st.session_state.active_chat_id == chat["chat_id"]:
                         start_new_chat()
@@ -323,35 +348,48 @@ with st.sidebar:
     st.markdown("---")
 
     # Quick Topics
-    st.markdown("### Quick Topics")
+    st.markdown(
+        f'<div class="sidebar-section-label">{icon("bolt", size=14)}'
+        f'<span>Quick Topics</span></div>',
+        unsafe_allow_html=True,
+    )
+    # (icon_name, material_icon, label, question)
     topics = [
-        ("⚖️", "Fundamental Rights", "Explain the Fundamental Rights under the Indian Constitution"),
-        ("📜", "IPC Sections", "What are the most important IPC sections everyone should know?"),
-        ("🔍", "RTI Act", "How do I file an RTI application in India?"),
-        ("🏠", "Property Law", "What are the key property laws in India for buying and selling?"),
-        ("🛡️", "Consumer Rights", "What are my consumer rights under the Consumer Protection Act?"),
-        ("👷", "Labour Law", "What are the major labour laws protecting workers in India?"),
+        ("shield-check", ":material/balance:",          "Fundamental Rights",
+         "Explain the Fundamental Rights under the Indian Constitution"),
+        ("book",         ":material/menu_book:",         "IPC Sections",
+         "What are the most important IPC sections everyone should know?"),
+        ("search",       ":material/policy:",            "RTI Act",
+         "How do I file an RTI application in India?"),
+        ("home",         ":material/home_work:",         "Property Law",
+         "What are the key property laws in India for buying and selling?"),
+        ("bag",          ":material/verified_user:",     "Consumer Rights",
+         "What are my consumer rights under the Consumer Protection Act?"),
+        ("briefcase",    ":material/work:",              "Labour Law",
+         "What are the major labour laws protecting workers in India?"),
     ]
-    for icon, label, question in topics:
-        if st.button(f"{icon}  {label}", key=f"topic_{label}", use_container_width=True):
+    for _icon_name, mat_icon, label, question in topics:
+        if st.button(label, key=f"topic_{label}", use_container_width=True, icon=mat_icon):
             submit_user_input(question)
             st.rerun()
 
     st.markdown("---")
     st.markdown(
-        "<p style='color:var(--text-dim); font-size:0.72rem; text-align:center; "
-        "letter-spacing:0.1em; text-transform:uppercase; font-weight:600;'>"
-        "⚡ Powered by Gemini<br>"
-        "<span style='font-size:0.65rem; opacity:0.7; text-transform:none; letter-spacing:normal;'>"
-        "Aether Neon · Legal AI</span></p>",
+        '<div class="sidebar-footer">'
+        f'<span class="footer-brand">{icon("bolt", size=14)}<span>Powered by Gemini</span></span>'
+        '<span class="footer-sub">Aether Neon · Legal AI</span>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
 # ── Disclaimer banner (always visible at top) ───────────────────────────────
 st.markdown(
     '<div class="disclaimer-banner">'
-    '<strong>⚠️ Disclaimer:</strong> Educational use only. '
+    f'{icon("alert", size=18)}'
+    '<div class="disclaimer-body">'
+    '<strong>Disclaimer:</strong> Educational use only. '
     '<strong>Not a substitute</strong> for advice from a qualified advocate.'
+    '</div>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -359,10 +397,10 @@ st.markdown(
 # ── Hero Banner + Welcome Cards (only when no messages) ─────────────────────
 if not st.session_state.messages:
     st.markdown(
-        """
+        f"""
         <div class="tricolor-bar"></div>
         <div class="hero-banner">
-            <h1>⚖️ Indian Law Assistant</h1>
+            <h1 class="hero-title">{icon("scale", size=30)}<span>Indian Law Assistant</span></h1>
             <p>Ask me anything about Indian laws, acts, constitutional provisions, or legal rights</p>
         </div>
         <div class="tricolor-bar"></div>
@@ -370,28 +408,33 @@ if not st.session_state.messages:
         unsafe_allow_html=True,
     )
 
-    st.markdown('<p class="welcome-label">💡 Try asking about</p>', unsafe_allow_html=True)
+    st.markdown(
+        f'<p class="welcome-label">{icon("lightbulb", size=14, cls="icon-glow-cyan")}'
+        f'<span style="margin-left:0.4rem;">Try asking about</span></p>',
+        unsafe_allow_html=True,
+    )
     st.markdown('<div class="welcome-state">', unsafe_allow_html=True)
 
+    # (material_icon, label, question)
     welcome_examples = [
-        ("⚖️", "Fundamental Rights",
+        (":material/balance:",       "Fundamental Rights",
          "What are the Fundamental Rights guaranteed by the Indian Constitution?"),
-        ("📜", "Article 21",
+        (":material/menu_book:",     "Article 21",
          "Explain Article 21 of the Indian Constitution and the right to life and liberty."),
-        ("🚨", "How to file an FIR",
+        (":material/local_police:",  "How to file an FIR",
          "What is the step-by-step procedure to file an FIR in India?"),
-        ("💍", "Divorce process",
+        (":material/handshake:",     "Divorce process",
          "What is the legal process for filing for divorce in India?"),
-        ("🏠", "Property inheritance",
+        (":material/home_work:",     "Property inheritance",
          "What are the property inheritance rights for daughters under Hindu law?"),
-        ("💼", "Workplace harassment",
+        (":material/work_history:",  "Workplace harassment",
          "What legal protections exist against sexual harassment at the workplace in India?"),
     ]
 
     cols = st.columns(3)
-    for i, (icon, label, q) in enumerate(welcome_examples):
+    for i, (mat_icon, label, q) in enumerate(welcome_examples):
         with cols[i % 3]:
-            if st.button(f"{icon}\n\n{label}", key=f"welcome_{i}", use_container_width=True):
+            if st.button(label, key=f"welcome_{i}", use_container_width=True, icon=mat_icon):
                 submit_user_input(q)
                 st.rerun()
 
@@ -418,10 +461,13 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
     # Using one container avoids the flash/jump between two empty()s.
     placeholder = st.empty()
     placeholder.markdown(
-        '<div class="msg-row bot-row">'
-        '<div class="avatar bot-avatar">⚖️</div>'
-        '<div class="bot-bubble" style="opacity:0.85;">'
-        '<span class="thinking-dots">Analyzing legal context</span></div>'
+        '<div class="msg-row bot-row thinking-row">'
+        f'<div class="avatar bot-avatar">{icon("scale", size=22)}</div>'
+        '<div class="bot-bubble" style="opacity:0.92;">'
+        '<span class="spinner-ring"></span>'
+        '<span class="thinking-text">Analyzing legal context</span>'
+        '<span class="typing-dots"><span></span><span></span><span></span></span>'
+        '</div>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -439,7 +485,11 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
 
         elapsed = time.time() - start
         placeholder.markdown(bot_bubble_html(full_response), unsafe_allow_html=True)
-        st.caption(f"⏱️ Response time: {elapsed:.1f}s")
+        st.markdown(
+            f'<div class="response-time">{icon("clock", size=13)}'
+            f'<span>Response time: {elapsed:.1f}s</span></div>',
+            unsafe_allow_html=True,
+        )
         return full_response
 
     except Exception as e:
@@ -499,13 +549,15 @@ if (
 ):
     col_regen, col_cont = st.columns(2)
     with col_regen:
-        if st.button("🔄 Regenerate", key="regen_btn", use_container_width=True):
+        if st.button("Regenerate", key="regen_btn",
+                     use_container_width=True, icon=":material/refresh:"):
             # Drop last assistant reply, keep the user msg, queue regeneration
             st.session_state.messages.pop()
             st.session_state.pending_response = True
             st.rerun()
     with col_cont:
-        if st.button("➡️ Continue", key="cont_btn", use_container_width=True):
+        if st.button("Continue", key="cont_btn",
+                     use_container_width=True, icon=":material/arrow_forward:"):
             cont_text = "Continue your previous response. Do not repeat what you already said."
             st.session_state.messages.append({"role": "user", "content": cont_text})
             if st.session_state.active_chat_id:
