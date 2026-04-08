@@ -128,20 +128,25 @@ def md_to_html(text: str, safe: bool = True) -> str:
 
 
 def _copy_button(content: str) -> str:
-    """Render a small 'Copy' button that copies the original plain text."""
+    """Render a small 'Copy' button that copies the original plain text.
+
+    The icon swap (copy → check on click) runs entirely client-side. The
+    SVG markup we feed into the JS template literal contains double quotes
+    (xmlns="..." etc.) which would otherwise break the surrounding
+    onclick="..." attribute, so we HTML-entity-escape the whole payload —
+    the browser unescapes it back to real quotes before executing the JS.
+    """
     encoded = urllib.parse.quote(content)
-    # Pre-built SVG markup so we can swap them in/out from JS without re-rendering.
-    # The original (default) state shows the copy icon + "Copy" label.
     copy_icon = icon("copy", size=14)
     check_icon = icon("check", size=14)
-    # Escape backticks/single quotes in the JS payload to keep onclick valid.
     js = (
         f"navigator.clipboard.writeText(decodeURIComponent('{encoded}'));"
         f"this.innerHTML=`{check_icon}<span>Copied</span>`;"
-        f"setTimeout(()=>this.innerHTML=`{copy_icon}<span>Copy</span>`,1800);"
+        f"setTimeout(()=>{{this.innerHTML=`{copy_icon}<span>Copy</span>`;}},1800);"
     )
+    onclick_attr = _html.escape(js, quote=True)
     return (
-        f'<button class="copy-btn" onclick="{js}">'
+        f'<button class="copy-btn" type="button" onclick="{onclick_attr}">'
         f'{copy_icon}<span>Copy</span>'
         f'</button>'
     )
