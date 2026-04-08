@@ -1034,16 +1034,44 @@ section[data-testid="stSidebar"] .stButton:first-of-type > button:hover .iconv {
 .disclaimer-banner .disclaimer-body { flex: 1; }
 
 /* ── Hero banner heading: icon-led title ─────────────────────── */
-.hero-banner .hero-title {
-    display: inline-flex;
-    align-items: center;
+/* The H1 is centered text inside the hero banner. We need to force flex
+   layout so the icon + label sit on one row, vertically centered, and
+   override the default H1 line-height which was pushing the SVG below
+   the text baseline. !important is needed because .hero-banner h1 has
+   higher specificity from earlier in this file. */
+.hero-banner h1.hero-title {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center;
     gap: 0.7rem;
+    line-height: 1 !important;
+    width: auto;
+}
+.hero-banner .hero-title > span {
+    display: inline-block;
+    line-height: 1.1;
+    /* The gradient text-fill on the H1 also tries to clip the SVG;
+       wrapping the label in <span> means only the span gets the
+       gradient, and the SVG keeps its own currentColor. */
 }
 .hero-banner .hero-title .iconv {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     color: var(--gold-bright);
     filter: drop-shadow(0 0 14px var(--gold-glow));
+    flex-shrink: 0;
+    /* The SVG is its own block in the flex row — no baseline alignment */
+    -webkit-text-fill-color: var(--gold-bright);
+}
+
+/* Streamlit auto-injects a permalink anchor (chain icon) next to every
+   heading rendered via st.markdown. Hide it inside the hero banner —
+   our title is decorative, not a section anchor. */
+.hero-banner h1 a,
+.hero-banner h1 [data-testid="stHeaderActionElements"],
+.hero-banner h1 .anchor-link,
+.hero-banner h1 [aria-label*="link"] {
+    display: none !important;
 }
 
 /* ── Sidebar title with brand mark ───────────────────────────── */
