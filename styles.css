@@ -121,17 +121,20 @@ section[data-testid="stSidebar"] hr {
     overflow: hidden;
 }
 .hero-banner::before {
-    content: "☸";
+    /* Ashoka Chakra — 24-spoked wheel rendered as SVG data-URI so it
+       scales perfectly at any DPI without emoji font fallbacks */
+    content: "";
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 12rem;
-    background: linear-gradient(135deg, var(--gold) 0%, var(--violet) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    opacity: 0.10;
+    width: 14rem;
+    height: 14rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='95' fill='none' stroke='%23FFB84D' stroke-width='4' opacity='0.6'/%3E%3Ccircle cx='100' cy='100' r='55' fill='none' stroke='%2300E5FF' stroke-width='3' opacity='0.5'/%3E%3Ccircle cx='100' cy='100' r='10' fill='%23B14AED' opacity='0.7'/%3E%3C!-- 24 spokes --%3E%3Cg stroke='%23FFB84D' stroke-width='2' opacity='0.55'%3E%3Cline x1='100' y1='5'  x2='100' y2='45'/%3E%3Cline x1='100' y1='155' x2='100' y2='195'/%3E%3Cline x1='5'   y1='100' x2='45'  y2='100'/%3E%3Cline x1='155' y1='100' x2='195' y2='100'/%3E%3Cline x1='30'  y1='30'  x2='58'  y2='58'/%3E%3Cline x1='142' y1='142' x2='170' y2='170'/%3E%3Cline x1='170' y1='30'  x2='142' y2='58'/%3E%3Cline x1='58'  y1='142' x2='30'  y2='170'/%3E%3C/g%3E%3Cg stroke='%2300E5FF' stroke-width='1.5' opacity='0.45'%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(15 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(30 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(45 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(60 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(75 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(105 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(120 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(135 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(150 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(165 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(195 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(210 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(225 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(240 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(255 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(285 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(300 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(315 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(330 100 100)'/%3E%3Cline x1='100' y1='5'  x2='100' y2='45' transform='rotate(345 100 100)'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.12;
     pointer-events: none;
     z-index: 0;
     animation: chakra-spin 60s linear infinite;
@@ -1209,6 +1212,83 @@ section[data-testid="stSidebar"] .stButton:first-of-type > button [data-testid="
 section[data-testid="stSidebar"] .stButton:first-of-type > button .material-symbols-rounded {
     color: var(--gold-bright) !important;
     text-shadow: 0 0 14px var(--gold-glow) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ANIMATION LAYER — Three.js canvas + GSAP entrance polish
+   ════════════════════════════════════════════════════════════════ */
+
+/* Three.js particle canvas injected by animations.py — sits below
+   all Streamlit content but above the deep background */
+#aether-canvas {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    pointer-events: none !important;
+    z-index: 0 !important;
+    opacity: 0.28 !important;
+}
+
+/* Keep Streamlit's main stack above the canvas */
+.stApp,
+[data-testid="stAppViewContainer"],
+section[data-testid="stSidebar"],
+[data-testid="stBottom"] {
+    position: relative;
+    z-index: 1 !important;
+}
+
+/* ── Response timing badge ────────────────────────────────────── */
+.response-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin: 0.2rem 0 0.4rem 48px;   /* align with bot bubble left edge */
+    letter-spacing: 0.04em;
+}
+.response-time .iconv {
+    width: 13px;
+    height: 13px;
+    color: var(--cyan);
+    opacity: 0.7;
+}
+
+/* ── GSAP entrance initial state (prevents flash before JS runs) ─ */
+/* Elements that GSAP will animate in from opacity:0 — we pre-hide
+   them so there's no frame where they show at full opacity before
+   the animation starts. GSAP sets opacity:1 at the end. */
+.hero-banner,
+.disclaimer-banner,
+.tricolor-bar {
+    will-change: transform, opacity;
+}
+
+/* Smooth button press feedback to complement Anime.js ripple */
+[data-testid="stMain"] .stButton > button:active,
+section[data-testid="stSidebar"] .stButton > button:active {
+    transform: scale(0.97) translateY(1px) !important;
+    transition: transform 0.08s ease !important;
+}
+
+/* ── Neon cursor trail: subtle glow on interactive elements ────── */
+[data-testid="stMain"] .stButton > button,
+section[data-testid="stSidebar"] .stButton > button,
+.copy-btn,
+[class*="st-key-welcome_"] button {
+    cursor: pointer;
+}
+
+/* ── Particle canvas fade-in on load ─────────────────────────── */
+@keyframes canvas-fadein {
+    from { opacity: 0; }
+    to   { opacity: 0.28; }
+}
+#aether-canvas {
+    animation: canvas-fadein 2s ease-out forwards !important;
 }
 
 /* ── Main area Material icons (Regenerate / Continue) ────────── */

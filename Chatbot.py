@@ -12,6 +12,7 @@ from db import init_db, create_chat, get_all_chats, get_chat, get_messages
 from db import append_message, update_chat_title, delete_chat
 from gemini_engine import stream_response, regenerate_response, generate_title, init_rotator
 from icons import icon
+from animations import inject_animations
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # API keys: try environment variable first (Render), then Streamlit secrets
@@ -76,6 +77,9 @@ def load_css() -> str:
         return f.read()
 
 st.markdown(f"<style>{load_css()}</style>", unsafe_allow_html=True)
+
+# ── Animation layer (GSAP + Three.js particles + Anime.js ripple) ───────────
+inject_animations()
 
 # ── Load dataset ─────────────────────────────────────────────────────────────
 @st.cache_resource
