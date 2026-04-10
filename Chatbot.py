@@ -13,6 +13,7 @@ from db import append_message, update_chat_title, delete_chat
 from gemini_engine import stream_response, regenerate_response, generate_title, init_rotator
 from icons import icon
 from animations import inject_animations
+from chart_renderer import parse_chart_from_response, truncate_at_chart_tag, render_chart
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # API keys: try environment variable first (Render), then Streamlit secrets
@@ -110,6 +111,30 @@ SYSTEM_PROMPT = (
     "6. Clarify constitutional provisions and fundamental rights\n"
     "7. Suggest consulting qualified legal professionals for specific advice\n\n"
     "Always provide complete, thorough responses. Do not cut off mid-sentence.\n\n"
+    "CHART INSTRUCTIONS:\n"
+    "When your response contains numerical comparisons, statistics, punishment tables, "
+    "timelines, distributions, or any data that would be clearer as a chart, append a "
+    "single <chart>…</chart> block at the very end of your response (after all prose). "
+    "Use ONLY one of these JSON structures:\n\n"
+    "Bar chart (comparisons, punishments, counts):\n"
+    '<chart>{"type":"bar","title":"…","xlabel":"…","ylabel":"…",'
+    '"data":[{"label":"…","value":number,"note":"optional text"},…]}</chart>\n\n'
+    "Horizontal bar (rankings, long labels):\n"
+    '<chart>{"type":"horizontal_bar","title":"…","xlabel":"…","ylabel":"…",'
+    '"data":[{"label":"…","value":number},…]}</chart>\n\n'
+    "Pie / donut (distributions, categories):\n"
+    '<chart>{"type":"pie","title":"…","data":[{"label":"…","value":number},…]}</chart>\n\n'
+    "Line chart (trends over time):\n"
+    '<chart>{"type":"line","title":"…","xlabel":"…","ylabel":"…",'
+    '"data":[{"x":year_or_number,"y":number,"label":"…"},…]}</chart>\n\n'
+    "Timeline (chronological events, amendments, history):\n"
+    '<chart>{"type":"timeline","title":"…",'
+    '"data":[{"year":number,"label":"…"},…]}</chart>\n\n'
+    "Rules:\n"
+    "- Add a chart ONLY when it genuinely clarifies numeric or comparative information.\n"
+    "- Do NOT add a chart for simple factual/definition questions.\n"
+    "- The chart block must be valid JSON — no trailing commas, no comments.\n"
+    "- Include at least 3 data points in a chart.\n\n"
     "Dataset Context:\n" + dataset_context
 )
 
@@ -487,26 +512,39 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
     try:
         for chunk in stream_response(API_KEY, SYSTEM_PROMPT, messages_for_api):
             full_response += chunk
+            # Hide the <chart> JSON block while it's being streamed so the
+            # user only sees prose — chart is rendered properly at the end.
+            display_text = truncate_at_chart_tag(full_response)
             placeholder.markdown(
-                bot_bubble_html(full_response, streaming=True),
+                bot_bubble_html(display_text, streaming=True),
                 unsafe_allow_html=True,
             )
 
         elapsed = time.time() - start
-        placeholder.markdown(bot_bubble_html(full_response), unsafe_allow_html=True)
+
+        # Strip chart block from displayed text and render separately
+        clean_text, chart_spec = parse_chart_from_response(full_response)
+        placeholder.markdown(bot_bubble_html(clean_text), unsafe_allow_html=True)
         st.markdown(
             f'<div class="response-time">{icon("clock", size=13)}'
             f'<span>Response time: {elapsed:.1f}s</span></div>',
             unsafe_allow_html=True,
         )
-        return full_response
+        if chart_spec:
+            render_chart(chart_spec)
+
+        # Return only clean text so the chart JSON isn't stored in history
+        return clean_text
 
     except Exception as e:
         elapsed = time.time() - start
         if full_response:
-            placeholder.markdown(bot_bubble_html(full_response), unsafe_allow_html=True)
+            clean_text, chart_spec = parse_chart_from_response(full_response)
+            placeholder.markdown(bot_bubble_html(clean_text), unsafe_allow_html=True)
+            if chart_spec:
+                render_chart(chart_spec)
             st.warning(f"Response may be incomplete ({elapsed:.1f}s). Click 'Continue' to extend.")
-            return full_response
+            return clean_text
         placeholder.empty()
         st.error(f"Failed to get response: {str(e)[:200]}")
         return ""

@@ -1,3 +1,4 @@
 streamlit
 google-genai>=1.0.0
 markdown>=3.5
+plotly>=5.18.0
