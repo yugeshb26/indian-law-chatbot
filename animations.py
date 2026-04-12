@@ -304,49 +304,44 @@ _SCRIPT = """
         P.__aetherScrollInit = true;
         P.__aetherScrollPaused = false;
 
-        // ── Snap helper ─────────────────────────────────────────────────────
+        // The chat scroll container in the new ChatGPT-style layout.
+        // stMainBlockContainer is the only element with overflow-y:auto
+        // on the right panel — the page itself is overflow:hidden.
+        function getChatScroller() {
+            return PD.querySelector('[data-testid="stMainBlockContainer"]') ||
+                   PD.querySelector('[data-testid="stMain"]');
+        }
+
+        // ── Snap helper ──────────────────────────────────────────────────────
         P.__aetherSnap = function(force) {
             if (force) P.__aetherScrollPaused = false;
             if (P.__aetherScrollPaused) return;
-            var last = PD.querySelector(
-                '[data-testid="stMain"] .thinking-row,' +
-                '[data-testid="stMain"] .msg-row'
-            );
-            // Get the LAST match (querySelector returns first; we need last)
-            var all = PD.querySelectorAll(
-                '[data-testid="stMain"] .thinking-row,' +
-                '[data-testid="stMain"] .msg-row'
-            );
-            if (all.length) {
-                all[all.length - 1].scrollIntoView({ behavior: 'instant', block: 'end' });
-            }
+            var scroller = getChatScroller();
+            if (!scroller) return;
+            scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'instant' });
         };
 
-        // ── Pause / resume on manual scroll ─────────────────────────────────
-        // Only listen on the actual Streamlit scroll container — not document —
-        // so sidebar scroll events don't bleed through.
-        var scroller = PD.querySelector('[data-testid="stAppViewContainer"]');
-
-        if (scroller) {
-            var lastScrollTop = scroller.scrollTop;
+        // ── Pause / resume — listen on stMainBlockContainer only ─────────────
+        // Sidebar scroll is on a completely separate element, so it can never
+        // accidentally pause/resume chat auto-scroll.
+        function attachScrollPause() {
+            var scroller = getChatScroller();
+            if (!scroller) return;
+            var last = scroller.scrollTop;
             scroller.addEventListener('scroll', function() {
                 var dist = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-                var scrolledUp = scroller.scrollTop < lastScrollTop;
-                lastScrollTop = scroller.scrollTop;
-                if (scrolledUp && dist > 80) {
-                    P.__aetherScrollPaused = true;
-                } else if (dist < 40) {
-                    P.__aetherScrollPaused = false;
-                }
+                var up   = scroller.scrollTop < last;
+                last     = scroller.scrollTop;
+                if (up && dist > 80)  P.__aetherScrollPaused = true;
+                if (dist < 40)        P.__aetherScrollPaused = false;
             }, { passive: true });
         }
 
-        // ── ResizeObserver on the chat block ─────────────────────────────────
+        // ── ResizeObserver — fires when chat content grows ───────────────────
         function startResizeObs() {
-            var block = PD.querySelector('[data-testid="stMainBlockContainer"]') ||
-                        PD.querySelector('[data-testid="stMain"]');
+            var block = getChatScroller();
             if (!block) return;
-
+            attachScrollPause();
             var ro = new P.ResizeObserver(function() {
                 if (P.__aetherScrollPaused) return;
                 P.requestAnimationFrame(function() { P.__aetherSnap(false); });
@@ -355,7 +350,6 @@ _SCRIPT = """
             P.__aetherSnap(true);
         }
 
-        // Start immediately if container exists, else wait for it
         if (PD.querySelector('[data-testid="stMainBlockContainer"]')) {
             startResizeObs();
         } else {

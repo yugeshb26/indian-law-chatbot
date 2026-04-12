@@ -214,18 +214,9 @@ def _snap_js(force: bool) -> str:
         function snap() {{
             if (P.__aetherSnap) {{ P.__aetherSnap({force_str}); return; }}
             // Fallback before animations.py has initialised
-            var cands = PD.querySelectorAll(
-                '[data-testid="stMain"] .msg-row,' +
-                '[data-testid="stMain"] .thinking-row,' +
-                '[data-testid="stMain"] .response-time'
-            );
-            if (cands.length) {{
-                cands[cands.length - 1].scrollIntoView({{ behavior: 'instant', block: 'end' }});
-            }} else {{
-                var el = PD.querySelector('[data-testid="stAppViewContainer"]')
-                      || PD.scrollingElement || PD.documentElement;
-                if (el) el.scrollTo({{ top: el.scrollHeight, behavior: 'instant' }});
-            }}
+            var el = PD.querySelector('[data-testid="stMainBlockContainer"]') ||
+                     PD.querySelector('[data-testid="stMain"]');
+            if (el) el.scrollTo({{ top: el.scrollHeight, behavior: 'instant' }});
         }}
         snap();
         P.setTimeout(snap, 200);

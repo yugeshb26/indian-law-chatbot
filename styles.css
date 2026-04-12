@@ -27,24 +27,83 @@
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: var(--text-primary); }
 #MainMenu, footer, header { visibility: hidden; }
 
-/* ── Force dark base on every Streamlit container ─────────────── */
-/* Defensive: even if config.toml theme isn't picked up, never let
-   Streamlit's default light backgrounds bleed through. */
-.stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stHeader"] {
+/* ══════════════════════════════════════════════════════════════════
+   CHATGPT-STYLE LAYOUT — Two independent scroll panels
+   ══════════════════════════════════════════════════════════════════
+   The page itself NEVER scrolls. Two panels scroll independently:
+     • Left  — sidebar (fixed width, full height, own overflow)
+     • Right — main chat area (fills remaining width, own overflow)
+   The chat input [stBottom] is pinned to the bottom of the right panel.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* 1. Lock the page — nothing scrolls at the document level */
+html, body {
+    height: 100vh !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+}
+
+/* 2. App shell — full viewport, flex row */
+.stApp {
+    height: 100vh !important;
+    overflow: hidden !important;
     background: var(--bg-deep) !important;
     color: var(--text-primary) !important;
 }
-[data-testid="stMain"] {
-    background-color: var(--bg-deep) !important;
+
+[data-testid="stAppViewContainer"] {
+    height: 100vh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: row !important;
+    background: var(--bg-deep) !important;
+    color: var(--text-primary) !important;
 }
+
+[data-testid="stHeader"] {
+    display: none !important;
+}
+
+/* 3. Main panel — flex column, fills remaining width */
+[data-testid="stMain"] {
+    flex: 1 1 0 !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: var(--bg-deep) !important;
+    min-width: 0 !important;
+}
+
+/* 4. Chat content area — the ONLY thing that scrolls on the right */
 [data-testid="stMainBlockContainer"],
 .main .block-container,
 .stMainBlockContainer {
+    flex: 1 1 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: 0 !important;          /* flex trick: forces scroll instead of grow */
     background: transparent !important;
     color: var(--text-primary) !important;
+    /* Thin cyan scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 229, 255, 0.20) transparent;
 }
+[data-testid="stMainBlockContainer"]::-webkit-scrollbar { width: 4px; }
+[data-testid="stMainBlockContainer"]::-webkit-scrollbar-track { background: transparent; }
+[data-testid="stMainBlockContainer"]::-webkit-scrollbar-thumb {
+    background: rgba(0, 229, 255, 0.20);
+    border-radius: 4px;
+}
+
+/* 5. Chat input bar — pinned to bottom of the right panel, never scrolls */
+[data-testid="stBottom"],
+[data-testid="stBottomBlockContainer"] {
+    flex-shrink: 0 !important;
+    position: relative !important;
+}
+
+/* Force dark base */
 
 /* Override Streamlit text colors for dark theme */
 .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span,
@@ -78,39 +137,37 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: var(--text
     color: inherit !important;
 }
 
-/* ── Sidebar — Cyber-glass dark panel ────────────────────────── */
+/* ── Sidebar — independent scroll panel ─────────────────────── */
 section[data-testid="stSidebar"] {
+    height: 100vh !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
     background:
         linear-gradient(180deg, rgba(11, 14, 39, 0.92) 0%, rgba(7, 9, 18, 0.96) 100%) !important;
     backdrop-filter: blur(24px) saturate(140%);
     -webkit-backdrop-filter: blur(24px) saturate(140%);
     border-right: 1px solid var(--glass-border);
     color: var(--text-primary);
-    transition: transform 0.3s ease, opacity 0.3s ease !important;
     z-index: 999 !important;
 }
-/* ── Sidebar scrolls independently ──────────────────────────────
-   Sidebar must have its own scroll container so it never triggers
-   the page-level ResizeObserver or scroll events on stAppViewContainer.
-   Streamlit wraps sidebar content inside:
-     section[data-testid="stSidebar"]
-       div (= stSidebarContent or similar — target this)
-   We target both the direct child and the known data-testid. */
-section[data-testid="stSidebar"],
+/* Inner content wrapper scrolls, sidebar frame stays fixed */
 section[data-testid="stSidebar"] > div,
 section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+    flex: 1 1 0 !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
-    max-height: 100vh !important;
+    height: 0 !important;
 }
-/* Thin gold scrollbar for the sidebar */
-section[data-testid="stSidebar"] {
+/* Thin gold scrollbar */
+section[data-testid="stSidebar"] > div {
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 184, 77, 0.25) transparent;
 }
-section[data-testid="stSidebar"]::-webkit-scrollbar { width: 4px; }
-section[data-testid="stSidebar"]::-webkit-scrollbar-track { background: transparent; }
-section[data-testid="stSidebar"]::-webkit-scrollbar-thumb {
+section[data-testid="stSidebar"] > div::-webkit-scrollbar { width: 4px; }
+section[data-testid="stSidebar"] > div::-webkit-scrollbar-track { background: transparent; }
+section[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb {
     background: rgba(255, 184, 77, 0.25);
     border-radius: 4px;
 }
@@ -330,10 +387,10 @@ section[data-testid="stSidebar"] .stButton:first-of-type > button {
 }
 .stChatInput textarea::placeholder { color: var(--text-dim) !important; }
 
-/* Make sure the main content area has bottom padding so the last
-   message isn't hidden behind the fixed chat input bar. */
+/* Bottom padding inside the scroll area so last message isn't
+   hidden behind the pinned chat input bar */
 [data-testid="stMainBlockContainer"] {
-    padding-bottom: 8rem !important;
+    padding-bottom: 5rem !important;
 }
 
 /* ── Action buttons (regenerate, continue) ───────────────────── */
