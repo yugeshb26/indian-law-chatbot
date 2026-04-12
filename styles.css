@@ -89,21 +89,28 @@ section[data-testid="stSidebar"] {
     transition: transform 0.3s ease, opacity 0.3s ease !important;
     z-index: 999 !important;
 }
-/* Sidebar scrolls independently — never triggers page-level scroll */
-section[data-testid="stSidebar"] > div:first-child {
+/* ── Sidebar scrolls independently ──────────────────────────────
+   Sidebar must have its own scroll container so it never triggers
+   the page-level ResizeObserver or scroll events on stAppViewContainer.
+   Streamlit wraps sidebar content inside:
+     section[data-testid="stSidebar"]
+       div (= stSidebarContent or similar — target this)
+   We target both the direct child and the known data-testid. */
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] > div,
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
     overflow-y: auto !important;
     overflow-x: hidden !important;
     max-height: 100vh !important;
+}
+/* Thin gold scrollbar for the sidebar */
+section[data-testid="stSidebar"] {
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 184, 77, 0.25) transparent;
 }
-section[data-testid="stSidebar"] > div:first-child::-webkit-scrollbar {
-    width: 4px;
-}
-section[data-testid="stSidebar"] > div:first-child::-webkit-scrollbar-track {
-    background: transparent;
-}
-section[data-testid="stSidebar"] > div:first-child::-webkit-scrollbar-thumb {
+section[data-testid="stSidebar"]::-webkit-scrollbar { width: 4px; }
+section[data-testid="stSidebar"]::-webkit-scrollbar-track { background: transparent; }
+section[data-testid="stSidebar"]::-webkit-scrollbar-thumb {
     background: rgba(255, 184, 77, 0.25);
     border-radius: 4px;
 }

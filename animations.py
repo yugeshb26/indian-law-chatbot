@@ -285,109 +285,84 @@ _SCRIPT = """
         obs.observe(PD.body, { childList: true, subtree: true });
     }
 
-    // ── 5. Persistent auto-scroll (MutationObserver on the real container) ──
-    // Streamlit's scrollable element is [data-testid="stAppViewContainer"],
-    // NOT document.scrollingElement / documentElement. Using the wrong
-    // element means scrollTo() silently does nothing.
-    function getScrollEl() {
-        return PD.querySelector('[data-testid="stAppViewContainer"]') ||
-               PD.scrollingElement ||
-               PD.documentElement;
-    }
+    // ── 5. Auto-scroll — ResizeObserver on the chat block container ──────────
+    //
+    // WHY ResizeObserver instead of MutationObserver:
+    //   • MutationObserver fires on *every* DOM change including sidebar
+    //     button clicks, which caused the page to jump while reading.
+    //   • ResizeObserver fires only when the OBSERVED element changes
+    //     height — stMainBlockContainer grows when chat content is added
+    //     or streaming adds more text, but NEVER when the sidebar rerenders.
+    //
+    // HOW scrolling works:
+    //   • scrollIntoView on the last .msg-row / .thinking-row keeps the
+    //     latest content visible at the bottom of the viewport.
+    //   • The sidebar scrolls independently (handled via CSS).
 
     function setupAutoScroll() {
         if (P.__aetherScrollInit) return;
         P.__aetherScrollInit = true;
         P.__aetherScrollPaused = false;
 
-        // Expose a callable so Python-side iframes can trigger a snap.
-        // We use scrollIntoView on the last chat element instead of scrolling
-        // to scrollHeight — scrollHeight includes padding, iframes, and Streamlit
-        // spacers below the content which creates a large blank gap on screen.
+        // ── Snap helper ─────────────────────────────────────────────────────
         P.__aetherSnap = function(force) {
             if (force) P.__aetherScrollPaused = false;
             if (P.__aetherScrollPaused) return;
-
-            // Find the last visible chat element
-            var candidates = PD.querySelectorAll(
-                '[data-testid="stMain"] .msg-row,' +
+            var last = PD.querySelector(
                 '[data-testid="stMain"] .thinking-row,' +
-                '[data-testid="stMain"] .response-time'
+                '[data-testid="stMain"] .msg-row'
             );
-            if (candidates.length) {
-                candidates[candidates.length - 1]
-                    .scrollIntoView({ behavior: 'instant', block: 'end' });
-                return;
+            // Get the LAST match (querySelector returns first; we need last)
+            var all = PD.querySelectorAll(
+                '[data-testid="stMain"] .thinking-row,' +
+                '[data-testid="stMain"] .msg-row'
+            );
+            if (all.length) {
+                all[all.length - 1].scrollIntoView({ behavior: 'instant', block: 'end' });
             }
-            // Fallback (welcome screen / no messages yet)
-            var el = getScrollEl();
-            if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
         };
 
-        // Pause auto-scroll when user actively scrolls up
-        PD.addEventListener('wheel', function(e) {
-            if (e.deltaY >= 0) return;          // scrolling down — don't pause
-            var el = getScrollEl();
-            if (!el) return;
-            var dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-            if (dist > 80) P.__aetherScrollPaused = true;
-        }, { passive: true });
+        // ── Pause / resume on manual scroll ─────────────────────────────────
+        // Only listen on the actual Streamlit scroll container — not document —
+        // so sidebar scroll events don't bleed through.
+        var scroller = PD.querySelector('[data-testid="stAppViewContainer"]');
 
-        // Re-enable when user scrolls back near the bottom
-        PD.addEventListener('scroll', function() {
-            var el = getScrollEl();
-            if (!el) return;
-            var dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-            if (dist < 60) P.__aetherScrollPaused = false;
-        }, { passive: true, capture: true });
-
-        // MutationObserver: ONLY fire when actual chat content changes.
-        // Filtering here is critical — Streamlit reruns on every sidebar click
-        // (topic button, chat history, new chat) which mutates the whole stMain
-        // tree. Without filtering that triggers __aetherSnap and the page jumps
-        // to the bottom while the user is reading.
-        var scrollObs = new P.MutationObserver(function(mutations) {
-            if (P.__aetherScrollPaused) return;
-            var relevant = false;
-            for (var i = 0; i < mutations.length; i++) {
-                var m = mutations[i];
-                // characterData = streaming token update inside bot bubble text node
-                if (m.type === 'characterData') { relevant = true; break; }
-                for (var j = 0; j < m.addedNodes.length; j++) {
-                    var node = m.addedNodes[j];
-                    if (node.nodeType !== 1) continue;
-                    var cl = node.classList;
-                    // Direct chat row / thinking row added
-                    if (cl && (cl.contains('msg-row') || cl.contains('thinking-row'))) {
-                        relevant = true; break;
-                    }
-                    // Or a wrapper that contains one (Streamlit sometimes wraps in divs)
-                    if (node.querySelector &&
-                        node.querySelector('.msg-row, .thinking-row, .streaming-cursor, .js-plotly-plot')) {
-                        relevant = true; break;
-                    }
+        if (scroller) {
+            var lastScrollTop = scroller.scrollTop;
+            scroller.addEventListener('scroll', function() {
+                var dist = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+                var scrolledUp = scroller.scrollTop < lastScrollTop;
+                lastScrollTop = scroller.scrollTop;
+                if (scrolledUp && dist > 80) {
+                    P.__aetherScrollPaused = true;
+                } else if (dist < 40) {
+                    P.__aetherScrollPaused = false;
                 }
-                if (relevant) break;
-            }
-            if (!relevant) return;
-            P.requestAnimationFrame(function() { P.__aetherSnap(false); });
-        });
+            }, { passive: true });
+        }
 
-        function startScrollObs() {
-            var root = PD.querySelector('[data-testid="stMain"]') || PD.body;
-            // characterData needed to track streaming text node updates
-            scrollObs.observe(root, { childList: true, subtree: true, characterData: true });
+        // ── ResizeObserver on the chat block ─────────────────────────────────
+        function startResizeObs() {
+            var block = PD.querySelector('[data-testid="stMainBlockContainer"]') ||
+                        PD.querySelector('[data-testid="stMain"]');
+            if (!block) return;
+
+            var ro = new P.ResizeObserver(function() {
+                if (P.__aetherScrollPaused) return;
+                P.requestAnimationFrame(function() { P.__aetherSnap(false); });
+            });
+            ro.observe(block);
             P.__aetherSnap(true);
         }
 
-        if (PD.querySelector('[data-testid="stMain"]')) {
-            startScrollObs();
+        // Start immediately if container exists, else wait for it
+        if (PD.querySelector('[data-testid="stMainBlockContainer"]')) {
+            startResizeObs();
         } else {
-            // stMain not yet in DOM — wait for it
             var waitObs = new P.MutationObserver(function() {
-                if (PD.querySelector('[data-testid="stMain"]')) {
+                if (PD.querySelector('[data-testid="stMainBlockContainer"]')) {
                     waitObs.disconnect();
-                    startScrollObs();
+                    startResizeObs();
                 }
             });
             waitObs.observe(PD.body, { childList: true, subtree: true });
