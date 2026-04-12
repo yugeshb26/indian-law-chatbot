@@ -325,16 +325,42 @@ _SCRIPT = """
             if (dist < 60) P.__aetherScrollPaused = false;
         }, { passive: true, capture: true });
 
-        // MutationObserver: follow content growth (streaming placeholder updates,
-        // new messages inserted by Streamlit's WebSocket renderer)
-        var scrollObs = new P.MutationObserver(function() {
+        // MutationObserver: ONLY fire when actual chat content changes.
+        // Filtering here is critical — Streamlit reruns on every sidebar click
+        // (topic button, chat history, new chat) which mutates the whole stMain
+        // tree. Without filtering that triggers __aetherSnap and the page jumps
+        // to the bottom while the user is reading.
+        var scrollObs = new P.MutationObserver(function(mutations) {
             if (P.__aetherScrollPaused) return;
+            var relevant = false;
+            for (var i = 0; i < mutations.length; i++) {
+                var m = mutations[i];
+                // characterData = streaming token update inside bot bubble text node
+                if (m.type === 'characterData') { relevant = true; break; }
+                for (var j = 0; j < m.addedNodes.length; j++) {
+                    var node = m.addedNodes[j];
+                    if (node.nodeType !== 1) continue;
+                    var cl = node.classList;
+                    // Direct chat row / thinking row added
+                    if (cl && (cl.contains('msg-row') || cl.contains('thinking-row'))) {
+                        relevant = true; break;
+                    }
+                    // Or a wrapper that contains one (Streamlit sometimes wraps in divs)
+                    if (node.querySelector &&
+                        node.querySelector('.msg-row, .thinking-row, .streaming-cursor, .js-plotly-plot')) {
+                        relevant = true; break;
+                    }
+                }
+                if (relevant) break;
+            }
+            if (!relevant) return;
             P.requestAnimationFrame(function() { P.__aetherSnap(false); });
         });
 
         function startScrollObs() {
             var root = PD.querySelector('[data-testid="stMain"]') || PD.body;
-            scrollObs.observe(root, { childList: true, subtree: true });
+            // characterData needed to track streaming text node updates
+            scrollObs.observe(root, { childList: true, subtree: true, characterData: true });
             P.__aetherSnap(true);
         }
 
