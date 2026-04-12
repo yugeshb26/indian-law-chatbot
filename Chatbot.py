@@ -208,21 +208,35 @@ def bot_bubble_html(content: str, streaming: bool = False) -> str:
 
 
 def _snap_js(force: bool) -> str:
-    """Shared JS: call __aetherSnap if ready, else scroll last chat element into view."""
+    """Shared JS: call __aetherSnap if ready, else scroll last chat element into view.
+
+    Uses scrollTop assignment (not scrollTo) for max cross-browser compat.
+    Retries at 150 ms, 400 ms, and 900 ms to survive Streamlit's async DOM updates.
+    """
     force_str = "true" if force else "false"
     return f"""<script>
     (function() {{
         var P  = window.parent;
         var PD = P.document;
-        function snap() {{
-            if (P.__aetherSnap) {{ P.__aetherSnap({force_str}); return; }}
-            // Fallback before animations.py has initialised
-            var el = PD.querySelector('[data-testid="stMainBlockContainer"]') ||
-                     PD.querySelector('[data-testid="stMain"]');
-            if (el) el.scrollTo({{ top: el.scrollHeight, behavior: 'instant' }});
+        function getScroller() {{
+            return PD.querySelector('[data-testid="stMainBlockContainer"]') ||
+                   PD.querySelector('.main .block-container') ||
+                   PD.querySelector('[data-testid="stMain"]');
         }}
+        function snap() {{
+            if (P.__aetherSnap) {{
+                P.__aetherSnap({force_str});
+                return;
+            }}
+            // Fallback: direct scrollTop assignment (works in Safari/Firefox)
+            var el = getScroller();
+            if (el) el.scrollTop = el.scrollHeight;
+        }}
+        // Fire immediately, then retry after Streamlit finishes its DOM work
         snap();
-        P.setTimeout(snap, 200);
+        P.setTimeout(snap, 150);
+        P.setTimeout(snap, 400);
+        P.setTimeout(snap, 900);
     }})();
     </script>"""
 

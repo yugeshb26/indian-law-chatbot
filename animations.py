@@ -285,97 +285,113 @@ _SCRIPT = """
         obs.observe(PD.body, { childList: true, subtree: true });
     }
 
-    // ── 5. Auto-scroll — ResizeObserver on the chat block container ──────────
+    // ── 5. Auto-scroll — robust multi-strategy scroll engine ─────────────────
     //
-    // WHY ResizeObserver instead of MutationObserver:
-    //   • MutationObserver fires on *every* DOM change including sidebar
-    //     button clicks, which caused the page to jump while reading.
-    //   • ResizeObserver fires only when the OBSERVED element changes
-    //     height — stMainBlockContainer grows when chat content is added
-    //     or streaming adds more text, but NEVER when the sidebar rerenders.
-    //
-    // HOW scrolling works:
-    //   • scrollIntoView on the last .msg-row / .thinking-row keeps the
-    //     latest content visible at the bottom of the viewport.
-    //   • The sidebar scrolls independently (handled via CSS).
+    // Design goals:
+    //   • Survive Streamlit DOM replacement on every rerun (the old
+    //     stMainBlockContainer node is discarded; a fresh one is mounted).
+    //   • Never fire on sidebar interactions (sidebar is a separate scroll node).
+    //   • Respect user scroll-up (pause auto-scroll while reading, resume
+    //     when they scroll back near the bottom).
+    //   • Work in Chrome, Firefox, and Safari (incl. strict cross-origin mode).
 
     function setupAutoScroll() {
-        if (P.__aetherScrollInit) return;
-        P.__aetherScrollInit = true;
-        P.__aetherScrollPaused = false;
+        // Always (re)register __aetherSnap so EVERY rerun gets a fresh closure
+        // pointing at the *current* live DOM node.
+        P.__aetherScrollPaused = P.__aetherScrollPaused || false;
 
-        // The chat scroll container in the new ChatGPT-style layout.
-        // stMainBlockContainer is the only element with overflow-y:auto
-        // on the right panel — the page itself is overflow:hidden.
+        // Always returns the LIVE element — called at snap time, not cached.
         function getChatScroller() {
+            // Try the precise block container first, then the outer main panel.
             return PD.querySelector('[data-testid="stMainBlockContainer"]') ||
+                   PD.querySelector('.main .block-container') ||
                    PD.querySelector('[data-testid="stMain"]');
         }
 
-        // ── Snap helper ──────────────────────────────────────────────────────
-        P.__aetherSnap = function(force) {
+        // ── Core snap: scrolls the container to its very bottom ──────────────
+        function doSnap(force) {
             if (force) P.__aetherScrollPaused = false;
             if (P.__aetherScrollPaused) return;
             var scroller = getChatScroller();
             if (!scroller) return;
-            scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'instant' });
-        };
+            // Use scrollTop rather than scrollTo({behavior}) for max compat.
+            scroller.scrollTop = scroller.scrollHeight;
+        }
 
-        // ── Pause / resume — listen on stMainBlockContainer only ─────────────
-        // Sidebar scroll is on a completely separate element, so it can never
-        // accidentally pause/resume chat auto-scroll.
-        function attachScrollPause() {
-            var scroller = getChatScroller();
-            if (!scroller) return;
+        // Expose globally so Chatbot.py's _snap_js can call it too.
+        P.__aetherSnap = doSnap;
+
+        // ── Pause / resume based on scroll direction ─────────────────────────
+        function attachScrollPause(scroller) {
+            if (scroller.__aetherPauseWired) return;
+            scroller.__aetherPauseWired = true;
             var last = scroller.scrollTop;
             scroller.addEventListener('scroll', function() {
                 var dist = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
                 var up   = scroller.scrollTop < last;
                 last     = scroller.scrollTop;
+                // User scrolled up more than 80px → pause
                 if (up && dist > 80)  P.__aetherScrollPaused = true;
+                // User is within 40px of bottom → resume
                 if (dist < 40)        P.__aetherScrollPaused = false;
             }, { passive: true });
         }
 
-        // ── ResizeObserver — fires when chat content grows ───────────────────
-        function startResizeObs() {
-            var block = getChatScroller();
-            if (!block) return;
-            attachScrollPause();
-            var ro = new P.ResizeObserver(function() {
+        // ── ResizeObserver — reconnected on every rerun ───────────────────────
+        // Streamlit replaces the DOM on each rerun, so we use a MutationObserver
+        // to detect when stMainBlockContainer appears (after each rerun) and
+        // attach a fresh ResizeObserver to it. The old RO is GC'd with its node.
+        var _activeBlock  = null;
+        var _activeRO     = null;
+
+        function connectToBlock(block) {
+            if (block === _activeBlock) return; // same node, already watching
+            if (_activeRO) { _activeRO.disconnect(); _activeRO = null; }
+            _activeBlock = block;
+            attachScrollPause(block);
+
+            _activeRO = new P.ResizeObserver(function() {
                 if (P.__aetherScrollPaused) return;
-                P.requestAnimationFrame(function() { P.__aetherSnap(false); });
+                P.requestAnimationFrame(function() { doSnap(false); });
             });
-            ro.observe(block);
-            P.__aetherSnap(true);
+            _activeRO.observe(block);
+
+            // Snap immediately after connecting to new node
+            P.requestAnimationFrame(function() { doSnap(false); });
         }
 
-        if (PD.querySelector('[data-testid="stMainBlockContainer"]')) {
-            startResizeObs();
-        } else {
-            var waitObs = new P.MutationObserver(function() {
-                if (PD.querySelector('[data-testid="stMainBlockContainer"]')) {
-                    waitObs.disconnect();
-                    startResizeObs();
-                }
-            });
-            waitObs.observe(PD.body, { childList: true, subtree: true });
-        }
+        // Watch for stMainBlockContainer appearing or being replaced.
+        var domWatcher = new P.MutationObserver(function() {
+            var block = getChatScroller();
+            if (block) connectToBlock(block);
+        });
+        domWatcher.observe(PD.body, { childList: true, subtree: true });
+
+        // Connect immediately if the element already exists.
+        var existing = getChatScroller();
+        if (existing) connectToBlock(existing);
+
+        // Mark one-time init done but do NOT block re-registration above.
+        P.__aetherScrollInit = true;
     }
 
     // ── Bootstrap: load libs then initialise ─────────────────────────────
-    // Guard against re-running on Streamlit hot-reload
+    // On every Streamlit rerun we MUST:
+    //   1. Re-run GSAP so new message rows get entrance animations.
+    //   2. Re-run setupAutoScroll so the ResizeObserver connects to the
+    //      *new* stMainBlockContainer (Streamlit replaces it each rerun).
+    //   3. Snap to the bottom immediately.
+    // We skip re-loading the CDN scripts (libs are cached on window.parent).
     if (P.__aetherAnimInit) {
-        // Libs already loaded — re-run GSAP for new elements and snap scroll
         if (P.gsap)  setupGSAP();
         if (P.anime) setupAnime();
-        // Snap to bottom after each Streamlit rerender (new message visible)
+        setupAutoScroll();          // reconnect RO to fresh DOM node
         if (P.__aetherSnap) P.__aetherSnap(false);
         return;
     }
     P.__aetherAnimInit = true;
 
-    // Set up auto-scroll immediately (no lib dependency)
+    // First load — set up auto-scroll immediately (no lib dependency)
     setupAutoScroll();
 
     // Load Three.js first so particles start ASAP

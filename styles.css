@@ -83,6 +83,7 @@ html, body {
     overflow-y: auto !important;
     overflow-x: hidden !important;
     height: 0 !important;          /* flex trick: forces scroll instead of grow */
+    min-height: 0 !important;      /* extra safety for Safari flex */
     background: transparent !important;
     color: var(--text-primary) !important;
     /* Thin cyan scrollbar */
@@ -100,7 +101,10 @@ html, body {
 [data-testid="stBottom"],
 [data-testid="stBottomBlockContainer"] {
     flex-shrink: 0 !important;
-    position: relative !important;
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 100 !important;
+    width: 100% !important;
 }
 
 /* Force dark base */
@@ -388,9 +392,10 @@ section[data-testid="stSidebar"] .stButton:first-of-type > button {
 .stChatInput textarea::placeholder { color: var(--text-dim) !important; }
 
 /* Bottom padding inside the scroll area so last message isn't
-   hidden behind the pinned chat input bar */
+   hidden behind the pinned chat input bar.
+   8rem gives enough room for tall Regenerate/Continue button rows too. */
 [data-testid="stMainBlockContainer"] {
-    padding-bottom: 5rem !important;
+    padding-bottom: 8rem !important;
 }
 
 /* ── Action buttons (regenerate, continue) ───────────────────── */
@@ -574,8 +579,8 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
         padding: 0.4rem 0.6rem !important;
     }
 
-    /* Reduce main padding */
-    .stMainBlockContainer { padding: 0.5rem 0.8rem !important; }
+    /* Reduce main padding — keep padding-bottom for input bar clearance */
+    .stMainBlockContainer { padding: 0.5rem 0.8rem 8rem 0.8rem !important; }
 
     /* Stack action buttons vertically */
     .action-row { flex-direction: column; }
@@ -607,7 +612,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
     /* Ensure text doesn't overflow */
     .stMarkdown, .stChatMessage { word-break: break-word; overflow-wrap: anywhere; }
 
-    .stMainBlockContainer { padding: 0.3rem 0.5rem !important; }
+    .stMainBlockContainer { padding: 0.3rem 0.5rem 8rem 0.5rem !important; }
 }
 
 /* ── Tablet (769px to 1024px) ────────────────────────────────── */
