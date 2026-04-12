@@ -300,10 +300,26 @@ _SCRIPT = """
         P.__aetherScrollInit = true;
         P.__aetherScrollPaused = false;
 
-        // Expose a callable so Python-side iframes can trigger a snap
+        // Expose a callable so Python-side iframes can trigger a snap.
+        // We use scrollIntoView on the last chat element instead of scrolling
+        // to scrollHeight — scrollHeight includes padding, iframes, and Streamlit
+        // spacers below the content which creates a large blank gap on screen.
         P.__aetherSnap = function(force) {
             if (force) P.__aetherScrollPaused = false;
             if (P.__aetherScrollPaused) return;
+
+            // Find the last visible chat element
+            var candidates = PD.querySelectorAll(
+                '[data-testid="stMain"] .msg-row,' +
+                '[data-testid="stMain"] .thinking-row,' +
+                '[data-testid="stMain"] .response-time'
+            );
+            if (candidates.length) {
+                candidates[candidates.length - 1]
+                    .scrollIntoView({ behavior: 'instant', block: 'end' });
+                return;
+            }
+            // Fallback (welcome screen / no messages yet)
             var el = getScrollEl();
             if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
         };

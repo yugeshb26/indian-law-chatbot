@@ -204,51 +204,43 @@ def bot_bubble_html(content: str, streaming: bool = False) -> str:
     )
 
 
+def _snap_js(force: bool) -> str:
+    """Shared JS: call __aetherSnap if ready, else scroll last chat element into view."""
+    force_str = "true" if force else "false"
+    return f"""<script>
+    (function() {{
+        var P  = window.parent;
+        var PD = P.document;
+        function snap() {{
+            if (P.__aetherSnap) {{ P.__aetherSnap({force_str}); return; }}
+            // Fallback before animations.py has initialised
+            var cands = PD.querySelectorAll(
+                '[data-testid="stMain"] .msg-row,' +
+                '[data-testid="stMain"] .thinking-row,' +
+                '[data-testid="stMain"] .response-time'
+            );
+            if (cands.length) {{
+                cands[cands.length - 1].scrollIntoView({{ behavior: 'instant', block: 'end' }});
+            }} else {{
+                var el = PD.querySelector('[data-testid="stAppViewContainer"]')
+                      || PD.scrollingElement || PD.documentElement;
+                if (el) el.scrollTo({{ top: el.scrollHeight, behavior: 'instant' }});
+            }}
+        }}
+        snap();
+        P.setTimeout(snap, 200);
+    }})();
+    </script>"""
+
+
 def scroll_to_bottom():
     """Snap to bottom after history renders (doesn't reset pause flag)."""
-    components.html(
-        """<script>
-        (function() {
-            var P = window.parent;
-            // Call the persistent auto-scroller if ready, else direct fallback
-            function snap() {
-                if (P.__aetherSnap) {
-                    P.__aetherSnap(false);
-                } else {
-                    var el = P.document.querySelector('[data-testid="stAppViewContainer"]')
-                          || P.document.scrollingElement || P.document.documentElement;
-                    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
-                }
-            }
-            snap();
-            P.setTimeout(snap, 200);
-        })();
-        </script>""",
-        height=0,
-    )
+    components.html(_snap_js(force=False), height=0)
 
 
 def start_scroll_tracker():
     """Force-snap to bottom and clear any pause flag before streaming starts."""
-    components.html(
-        """<script>
-        (function() {
-            var P = window.parent;
-            function snap() {
-                if (P.__aetherSnap) {
-                    P.__aetherSnap(true);   // true = clear pause flag
-                } else {
-                    var el = P.document.querySelector('[data-testid="stAppViewContainer"]')
-                          || P.document.scrollingElement || P.document.documentElement;
-                    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
-                }
-            }
-            snap();
-            P.setTimeout(snap, 150);
-        })();
-        </script>""",
-        height=0,
-    )
+    components.html(_snap_js(force=True), height=0)
 
 
 # ── Session state init ───────────────────────────────────────────────────────
