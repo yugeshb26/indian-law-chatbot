@@ -14,6 +14,7 @@ from gemini_engine import stream_response, regenerate_response, generate_title, 
 from icons import icon
 from animations import inject_animations
 from chart_renderer import parse_chart_from_response, truncate_at_chart_tag, render_chart
+from rag import retrieve, format_context, index_ready
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # API keys: try environment variable first (Render), then Streamlit secrets
@@ -24,7 +25,6 @@ else:
     API_KEYS = list(st.secrets["GEMINI_API_KEYS"])
 rotator = init_rotator(API_KEYS)
 API_KEY = API_KEYS[0]
-DATASET_PATH = "Alpie-core_core_indian_law.json"
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -82,24 +82,10 @@ st.markdown(f"<style>{load_css()}</style>", unsafe_allow_html=True)
 # ── Animation layer (GSAP + Three.js particles + Anime.js ripple) ───────────
 inject_animations()
 
-# ── Load dataset ─────────────────────────────────────────────────────────────
-@st.cache_resource
-def load_context() -> str:
-    with open(DATASET_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    # Load up to 200 entries for rich context (BNS, BNSS, BSA, Constitution)
-    return "\n".join(
-        f"Q: {item['prompt']}\nA: {item['response']}"
-        for item in data[:200]
-    )
+# ── Base system prompt (no static context — RAG injects per-query) ───────────
+_RAG_MODE = "vector" if index_ready() else "BM25 keyword"
 
-try:
-    dataset_context = load_context()
-except FileNotFoundError:
-    st.error(f"File not found: `{DATASET_PATH}`")
-    st.stop()
-
-SYSTEM_PROMPT = (
+BASE_SYSTEM_PROMPT = (
     "You are an expert Indian Law Chatbot assistant with comprehensive knowledge of "
     "Indian legal provisions, acts, and regulations.\n\n"
     "Your responsibilities:\n"
@@ -134,9 +120,26 @@ SYSTEM_PROMPT = (
     "- Add a chart ONLY when it genuinely clarifies numeric or comparative information.\n"
     "- Do NOT add a chart for simple factual/definition questions.\n"
     "- The chart block must be valid JSON — no trailing commas, no comments.\n"
-    "- Include at least 3 data points in a chart.\n\n"
-    "Dataset Context:\n" + dataset_context
+    "- Include at least 3 data points in a chart.\n"
 )
+
+
+def build_system_prompt(user_question: str) -> str:
+    """Build a system prompt with RAG context retrieved for *user_question*.
+
+    Retrieves the 8 most relevant Q&A pairs from the full 15 K-entry dataset
+    and injects them as grounding context.  Falls back gracefully if retrieval
+    fails (prompt still works, just without dataset context).
+    """
+    results = retrieve(user_question, API_KEY, k=8)
+    context = format_context(results)
+    if context:
+        return (
+            BASE_SYSTEM_PROMPT
+            + "\n\nRelevant Legal Context (retrieved from dataset):\n"
+            + context
+        )
+    return BASE_SYSTEM_PROMPT
 
 # ── Markdown + bubble rendering helpers ─────────────────────────────────────
 import html as _html
@@ -563,11 +566,19 @@ if st.session_state.pending_response and st.session_state.messages:
     # and then follows page-height growth every 120 ms throughout streaming.
     start_scroll_tracker()
 
+    # Retrieve context relevant to the LATEST user question (not the first),
+    # so each turn gets fresh grounding from the full 15 K-entry dataset.
+    latest_question = next(
+        (m["content"] for m in reversed(st.session_state.messages) if m["role"] == "user"),
+        st.session_state.messages[0]["content"],
+    )
+    system_prompt = build_system_prompt(latest_question)
+
     # Build API messages from full history
     api_messages = [
         {
             "role": "user",
-            "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"],
+            "content": system_prompt + "\n\nUser: " + st.session_state.messages[0]["content"],
         }
     ]
     for m in st.session_state.messages[1:]:
