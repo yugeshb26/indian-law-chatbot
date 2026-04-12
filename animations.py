@@ -285,15 +285,87 @@ _SCRIPT = """
         obs.observe(PD.body, { childList: true, subtree: true });
     }
 
+    // ── 5. Persistent auto-scroll (MutationObserver on the real container) ──
+    // Streamlit's scrollable element is [data-testid="stAppViewContainer"],
+    // NOT document.scrollingElement / documentElement. Using the wrong
+    // element means scrollTo() silently does nothing.
+    function getScrollEl() {
+        return PD.querySelector('[data-testid="stAppViewContainer"]') ||
+               PD.scrollingElement ||
+               PD.documentElement;
+    }
+
+    function setupAutoScroll() {
+        if (P.__aetherScrollInit) return;
+        P.__aetherScrollInit = true;
+        P.__aetherScrollPaused = false;
+
+        // Expose a callable so Python-side iframes can trigger a snap
+        P.__aetherSnap = function(force) {
+            if (force) P.__aetherScrollPaused = false;
+            if (P.__aetherScrollPaused) return;
+            var el = getScrollEl();
+            if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+        };
+
+        // Pause auto-scroll when user actively scrolls up
+        PD.addEventListener('wheel', function(e) {
+            if (e.deltaY >= 0) return;          // scrolling down — don't pause
+            var el = getScrollEl();
+            if (!el) return;
+            var dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+            if (dist > 80) P.__aetherScrollPaused = true;
+        }, { passive: true });
+
+        // Re-enable when user scrolls back near the bottom
+        PD.addEventListener('scroll', function() {
+            var el = getScrollEl();
+            if (!el) return;
+            var dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+            if (dist < 60) P.__aetherScrollPaused = false;
+        }, { passive: true, capture: true });
+
+        // MutationObserver: follow content growth (streaming placeholder updates,
+        // new messages inserted by Streamlit's WebSocket renderer)
+        var scrollObs = new P.MutationObserver(function() {
+            if (P.__aetherScrollPaused) return;
+            P.requestAnimationFrame(function() { P.__aetherSnap(false); });
+        });
+
+        function startScrollObs() {
+            var root = PD.querySelector('[data-testid="stMain"]') || PD.body;
+            scrollObs.observe(root, { childList: true, subtree: true });
+            P.__aetherSnap(true);
+        }
+
+        if (PD.querySelector('[data-testid="stMain"]')) {
+            startScrollObs();
+        } else {
+            // stMain not yet in DOM — wait for it
+            var waitObs = new P.MutationObserver(function() {
+                if (PD.querySelector('[data-testid="stMain"]')) {
+                    waitObs.disconnect();
+                    startScrollObs();
+                }
+            });
+            waitObs.observe(PD.body, { childList: true, subtree: true });
+        }
+    }
+
     // ── Bootstrap: load libs then initialise ─────────────────────────────
     // Guard against re-running on Streamlit hot-reload
     if (P.__aetherAnimInit) {
-        // Libs already loaded — just re-run GSAP for new elements
+        // Libs already loaded — re-run GSAP for new elements and snap scroll
         if (P.gsap)  setupGSAP();
         if (P.anime) setupAnime();
+        // Snap to bottom after each Streamlit rerender (new message visible)
+        if (P.__aetherSnap) P.__aetherSnap(false);
         return;
     }
     P.__aetherAnimInit = true;
+
+    // Set up auto-scroll immediately (no lib dependency)
+    setupAutoScroll();
 
     // Load Three.js first so particles start ASAP
     loadInParent('""" + _THREE_URL + """', 'aether-three', function() {

@@ -205,72 +205,48 @@ def bot_bubble_html(content: str, streaming: bool = False) -> str:
 
 
 def scroll_to_bottom():
-    """One-shot instant scroll to bottom (used after history renders)."""
+    """Snap to bottom after history renders (doesn't reset pause flag)."""
     components.html(
-        """
-        <script>
+        """<script>
         (function() {
-            var P  = window.parent;
-            var el = P.document.scrollingElement || P.document.documentElement;
-            function go() { el.scrollTo({ top: el.scrollHeight, behavior: 'instant' }); }
-            go();
-            // Retry after layout paint settles
-            P.setTimeout(go, 120);
-            P.setTimeout(go, 380);
+            var P = window.parent;
+            // Call the persistent auto-scroller if ready, else direct fallback
+            function snap() {
+                if (P.__aetherSnap) {
+                    P.__aetherSnap(false);
+                } else {
+                    var el = P.document.querySelector('[data-testid="stAppViewContainer"]')
+                          || P.document.scrollingElement || P.document.documentElement;
+                    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+                }
+            }
+            snap();
+            P.setTimeout(snap, 200);
         })();
-        </script>
-        """,
+        </script>""",
         height=0,
     )
 
 
 def start_scroll_tracker():
-    """Inject a self-stopping scroll tracker for the streaming window.
-
-    Polls every 120 ms for up to 45 s (covers very long responses).
-    Follows content growth automatically. Stops if the user manually
-    scrolls up more than 80 px (respects user intent).
-    """
+    """Force-snap to bottom and clear any pause flag before streaming starts."""
     components.html(
-        """
-        <script>
+        """<script>
         (function() {
-            var P  = window.parent;
-            var el = P.document.scrollingElement || P.document.documentElement;
-
-            // Immediate snap to bottom before stream begins
-            el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
-
-            var lastH      = el.scrollHeight;
-            var deadline   = Date.now() + 45000;
-            var paused     = false;   // user scrolled up
-
-            // Detect intentional upward scroll
-            P.document.addEventListener('wheel', function(e) {
-                if (e.deltaY < 0) paused = true;
-            }, { passive: true });
-            P.document.addEventListener('touchmove', function() {
-                // Only pause if we're not at the bottom
-                var dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-                if (dist > 80) paused = true;
-            }, { passive: true });
-
-            var tid = P.setInterval(function() {
-                if (Date.now() > deadline) { P.clearInterval(tid); return; }
-
-                var dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-
-                // Re-engage auto-scroll if user has scrolled back near bottom
-                if (dist < 60) paused = false;
-
-                if (!paused && el.scrollHeight !== lastH) {
-                    lastH = el.scrollHeight;
-                    el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+            var P = window.parent;
+            function snap() {
+                if (P.__aetherSnap) {
+                    P.__aetherSnap(true);   // true = clear pause flag
+                } else {
+                    var el = P.document.querySelector('[data-testid="stAppViewContainer"]')
+                          || P.document.scrollingElement || P.document.documentElement;
+                    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
                 }
-            }, 120);
+            }
+            snap();
+            P.setTimeout(snap, 150);
         })();
-        </script>
-        """,
+        </script>""",
         height=0,
     )
 
