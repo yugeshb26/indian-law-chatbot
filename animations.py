@@ -33,12 +33,15 @@ _SCRIPT = """
         PD.head.appendChild(s);
     }
 
-    // ── 1. Inject smooth-scroll CSS into parent ───────────────────────────
+    // ── 1. Ensure programmatic scrolls are always instant ────────────────
+    // Do NOT inject scroll-behavior:smooth — it fights the Python-side
+    // scroll tracker which needs instant positioning during streaming.
     (function injectScrollCSS() {
         if (PD.getElementById('aether-smooth-scroll')) return;
         var style = PD.createElement('style');
         style.id  = 'aether-smooth-scroll';
-        style.textContent = 'html { scroll-behavior: smooth !important; }';
+        // Anchor-link clicks get smooth scroll; JS scrollTo stays instant
+        style.textContent = 'a[href^="#"] { scroll-behavior: smooth; }';
         PD.head.appendChild(style);
     })();
 

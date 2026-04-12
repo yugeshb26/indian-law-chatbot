@@ -205,26 +205,70 @@ def bot_bubble_html(content: str, streaming: bool = False) -> str:
 
 
 def scroll_to_bottom():
-    """Scroll the parent (Streamlit) page to the bottom.
+    """One-shot instant scroll to bottom (used after history renders)."""
+    components.html(
+        """
+        <script>
+        (function() {
+            var P  = window.parent;
+            var el = P.document.scrollingElement || P.document.documentElement;
+            function go() { el.scrollTo({ top: el.scrollHeight, behavior: 'instant' }); }
+            go();
+            // Retry after layout paint settles
+            P.setTimeout(go, 120);
+            P.setTimeout(go, 380);
+        })();
+        </script>
+        """,
+        height=0,
+    )
 
-    st.markdown strips <script> tags, so we inject via components.html
-    which renders inside an iframe; we then walk up to window.parent
-    and scroll its document. The iframe itself is 0px tall so it's
-    invisible.
+
+def start_scroll_tracker():
+    """Inject a self-stopping scroll tracker for the streaming window.
+
+    Polls every 120 ms for up to 45 s (covers very long responses).
+    Follows content growth automatically. Stops if the user manually
+    scrolls up more than 80 px (respects user intent).
     """
     components.html(
         """
         <script>
-            const scroll = () => {
-                const doc = window.parent.document;
-                doc.documentElement.scrollTo({
-                    top: doc.documentElement.scrollHeight,
-                    behavior: 'smooth'
-                });
-            };
-            // Run twice — once immediately, once after layout settles.
-            scroll();
-            setTimeout(scroll, 250);
+        (function() {
+            var P  = window.parent;
+            var el = P.document.scrollingElement || P.document.documentElement;
+
+            // Immediate snap to bottom before stream begins
+            el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+
+            var lastH      = el.scrollHeight;
+            var deadline   = Date.now() + 45000;
+            var paused     = false;   // user scrolled up
+
+            // Detect intentional upward scroll
+            P.document.addEventListener('wheel', function(e) {
+                if (e.deltaY < 0) paused = true;
+            }, { passive: true });
+            P.document.addEventListener('touchmove', function() {
+                // Only pause if we're not at the bottom
+                var dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+                if (dist > 80) paused = true;
+            }, { passive: true });
+
+            var tid = P.setInterval(function() {
+                if (Date.now() > deadline) { P.clearInterval(tid); return; }
+
+                var dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+
+                // Re-engage auto-scroll if user has scrolled back near bottom
+                if (dist < 60) paused = false;
+
+                if (!paused && el.scrollHeight !== lastH) {
+                    lastH = el.scrollHeight;
+                    el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+                }
+            }, 120);
+        })();
         </script>
         """,
         height=0,
@@ -556,9 +600,9 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
 if st.session_state.pending_response and st.session_state.messages:
     chat_id = st.session_state.active_chat_id
 
-    # Scroll into view BEFORE the streaming starts so the user sees their
-    # just-submitted question and the loading bubble.
-    scroll_to_bottom()
+    # Start the continuous scroll tracker — it snaps to bottom immediately
+    # and then follows page-height growth every 120 ms throughout streaming.
+    start_scroll_tracker()
 
     # Build API messages from full history
     api_messages = [
