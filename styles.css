@@ -430,12 +430,15 @@ section[data-testid="stSidebar"] {
     top: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
-    overflow: hidden !important; /* prevent main from scrolling */
+    overflow-y: auto !important; /* allow main content to scroll */
+    -webkit-overflow-scrolling: touch !important;
     height: 100vh !important;
+    box-sizing: border-box !important;
+    padding-bottom: 96px !important; /* leave space for bottom input/footer */
 }
 
 [data-testid="stMainBlockContainer"] {
-    overflow: hidden !important;
+    overflow-y: auto !important;
     height: 100% !important;
 }
 
