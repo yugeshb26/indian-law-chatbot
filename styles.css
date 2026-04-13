@@ -171,9 +171,7 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid var(--glass-border);
     color: var(--text-primary);
     z-index: 999 !important;
-    /* Ensure proper width */
-    min-width: 240px !important;
-    max-width: 300px !important;
+    /* Removed fixed width to use default Streamlit sizing */
 }
 /* Inner content div scrolls independently */
 section[data-testid="stSidebar"] > div {
