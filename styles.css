@@ -65,7 +65,7 @@ html, body {
 
 /* 4. Main area — flex column filling remaining width */
 [data-testid="stMain"] {
-    flex: 1 1 0% !important;
+    flex: 1 1 auto !important;
     min-width: 0 !important;
     height: 100vh !important;
     max-height: 100vh !important;
@@ -87,7 +87,7 @@ html, body {
     color: var(--text-primary) !important;
     padding-bottom: 5rem !important;
     /* Desktop max-width — centered like ChatGPT */
-    max-width: 860px !important;
+    max-width: min(860px, calc(100vw - 320px)) !important;
     width: 100% !important;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -161,9 +161,10 @@ section[data-testid="stSidebar"] {
     height: 100vh !important;
     max-height: 100vh !important;
     width: clamp(240px, 24vw, 320px) !important;
-    min-width: 220px !important;
+    min-width: 240px !important;
     max-width: 320px !important;
-    flex-shrink: 0 !important;
+    flex: 0 0 auto !important;
+    box-sizing: border-box !important;
     overflow: hidden !important;
     display: flex !important;
     flex-direction: column !important;
@@ -556,8 +557,9 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] svg {
     /* On mobile Streamlit collapses the sidebar into an overlay —
        let it work naturally, just ensure max-width/shadow */
     section[data-testid="stSidebar"] {
-        min-width: 270px !important;
-        max-width: 85vw !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
         box-shadow: 4px 0 30px rgba(0,0,0,0.5) !important;
     }
 
