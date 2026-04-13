@@ -236,6 +236,7 @@ for _key, _default in [
     ("active_chat_id", None),
     ("messages", []),
     ("pending_response", False),  # True while we still need to stream a reply
+    ("api_error", None),          # {"type": "quota"|"generic", "msg": str} — shown after rerun
 ]:
     if _key not in st.session_state:
         st.session_state[_key] = _default
@@ -289,6 +290,7 @@ def submit_user_input(text: str):
     st.session_state.messages.append({"role": "user", "content": text})
     append_message(st.session_state.active_chat_id, "user", text)
     st.session_state.pending_response = True
+    st.session_state.api_error = None  # dismiss any prior error banner
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -480,6 +482,29 @@ for msg in st.session_state.messages:
     else:
         st.markdown(bot_bubble_html(msg["content"]), unsafe_allow_html=True)
 
+# ── Persistent API error banner (survives reruns) ──────────────────────────
+# Stashed by stream_and_display() when an API call fails. We render here so
+# the banner shows AFTER the rerun that fires at the end of the streaming
+# block. Dismissed automatically when the user submits their next question.
+if st.session_state.api_error:
+    _err = st.session_state.api_error
+    if _err["type"] == "quota":
+        st.markdown(
+            '<div class="quota-banner">'
+            f'{icon("alert", size=22)}'
+            '<div class="quota-body">'
+            '<strong>API quota exhausted</strong>'
+            '<p>All Gemini API keys have hit their daily rate limit. '
+            'Please wait until the quota resets (midnight Pacific time for the free tier) '
+            'or add a new API key from '
+            '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</p>'
+            '</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.error(f"Failed to get response: {_err['msg']}")
+
 # Auto-scroll the page to the latest message after a normal render.
 # Skipped while streaming so the placeholder doesn't fight the scroll.
 if st.session_state.messages and not st.session_state.pending_response:
@@ -545,7 +570,21 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
             st.warning(f"Response may be incomplete ({elapsed:.1f}s). Click 'Continue' to extend.")
             return clean_text
         placeholder.empty()
-        st.error(f"Failed to get response: {str(e)[:200]}")
+
+        # Stash the error in session_state so it survives the st.rerun()
+        # that happens right after this function returns. Rendering directly
+        # here would be wiped by the rerun before the user ever sees it.
+        err_msg = str(e)
+        err_lower = err_msg.lower()
+        if (
+            "rate limit" in err_lower
+            or "quota" in err_lower
+            or "429" in err_lower
+            or "resource_exhausted" in err_lower
+        ):
+            st.session_state.api_error = {"type": "quota", "msg": err_msg}
+        else:
+            st.session_state.api_error = {"type": "generic", "msg": err_msg[:300]}
         return ""
 
 

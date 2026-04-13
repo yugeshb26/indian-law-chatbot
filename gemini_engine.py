@@ -105,6 +105,7 @@ def stream_response(api_key_unused: str, system_prompt: str, messages: list[dict
 
     full_text = ""
     attempt = 0
+    last_error = None
 
     while attempt < MAX_RETRIES:
         key = rotator.get_key()
@@ -134,6 +135,7 @@ def stream_response(api_key_unused: str, system_prompt: str, messages: list[dict
 
         except Exception as e:
             err = str(e).lower()
+            last_error = e
             if "429" in err or "resource_exhausted" in err or "quota" in err:
                 rotator.mark_failed(key)
                 attempt += 1
@@ -147,6 +149,18 @@ def stream_response(api_key_unused: str, system_prompt: str, messages: list[dict
                     raise RuntimeError(f"Gemini API failed: {str(e)[:200]}")
                 time.sleep(RETRY_DELAY * attempt)
                 continue
+
+    # All retries exhausted without a successful response
+    if full_text:
+        return
+    err_str = str(last_error) if last_error else ""
+    if "429" in err_str or "resource_exhausted" in err_str.lower() or "quota" in err_str.lower():
+        raise RuntimeError(
+            "All API keys have hit their rate limit / daily quota. "
+            "Please wait for the quota to reset (resets at midnight Pacific time for free tier) "
+            "or add a new Gemini API key in .streamlit/secrets.toml."
+        )
+    raise RuntimeError(f"Gemini API failed after {MAX_RETRIES} retries: {err_str[:200]}")
 
 
 def _seems_complete(text: str) -> bool:

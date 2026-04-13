@@ -1374,3 +1374,94 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button 
     .hero-banner .hero-title .iconv { width: 24px; height: 24px; }
     [class*="st-key-welcome_"] button .iconv { width: 22px; height: 22px; }
 }
+
+/* ── Quota-exhausted banner ─────────────────────────────────── */
+.quota-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+    background: linear-gradient(135deg,
+        rgba(255, 77, 109, 0.14) 0%,
+        rgba(255, 184, 77, 0.10) 100%);
+    border: 1px solid rgba(255, 77, 109, 0.45);
+    border-left: 3px solid #ff4d6d;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    margin: 1rem 0;
+    box-shadow: 0 4px 20px rgba(255, 77, 109, 0.15);
+    animation: quota-fade-in 0.4s ease-out;
+}
+.quota-banner .iconv {
+    color: #ff8a9c;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.quota-banner .quota-body { flex: 1; min-width: 0; }
+.quota-banner strong {
+    display: block;
+    color: #ffb3c0;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    letter-spacing: 0.2px;
+}
+.quota-banner p {
+    color: rgba(232, 235, 247, 0.85);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    margin: 0;
+}
+.quota-banner a {
+    color: var(--gold, #FFB84D);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.quota-banner a:hover { color: #ffd089; }
+@keyframes quota-fade-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Independent scrolling (sidebar scrolls, main stays put) ──────────
+   Streamlit's own scroll container is stAppViewContainer — so we lock
+   the page by pinning html/body AND the app view container to 100vh
+   with overflow:hidden. Then we turn on overflow inside the sidebar's
+   inner content wrapper, and inside stMain so chat messages still
+   scroll inside the pane itself. overscroll-behavior:contain breaks
+   the scroll-chain so sidebar scrolling never affects main, and v.v. */
+html, body {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+.stApp,
+[data-testid="stAppViewContainer"] {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+
+/* Sidebar — outer section pinned, inner content is the scroll context */
+section[data-testid="stSidebar"] {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+section[data-testid="stSidebar"] > div,
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+    height: 100% !important;
+    max-height: 100vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+}
+
+/* Main — its own independent scroll, isolated from sidebar */
+[data-testid="stMain"] {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+}
