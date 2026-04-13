@@ -255,8 +255,8 @@ def start_scroll_tracker():
 for _key, _default in [
     ("active_chat_id", None),
     ("messages", []),
-    ("pending_response", False),  # True while we still need to stream a reply
-    ("api_error", None),          # Persists API errors across reruns
+    ("pending_response", False),
+    ("api_error", None),
 ]:
     if _key not in st.session_state:
         st.session_state[_key] = _default
@@ -448,7 +448,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Show persisted API error (survives st.rerun()) ───────────────────────────
+# ── Persisted API error (survives st.rerun()) ────────────────────────────────
 if st.session_state.api_error:
     st.error(f"API Error — {st.session_state.api_error}", icon="🚨")
     st.session_state.api_error = None

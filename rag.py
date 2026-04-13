@@ -1,8 +1,6 @@
 """
-RAG retrieval for Indian Law Chatbot — BM25 only.
-
-Loads Q&A pairs directly from Alpie-core_core_indian_law.json and runs
-keyword search using rank_bm25. No embeddings, no model downloads.
+RAG retrieval — BM25 keyword search over Alpie-core_core_indian_law.json.
+No embeddings, no model downloads, no external API calls.
 """
 
 import json
@@ -16,7 +14,7 @@ _DATASET = os.path.join(_BASE, "Alpie-core_core_indian_law.json")
 
 
 def index_ready() -> bool:
-    return False  # BM25-only mode; vector index not used
+    return False  # BM25-only; vector index not used
 
 
 @st.cache_resource(show_spinner="Loading legal knowledge base …")
@@ -33,7 +31,6 @@ def _load_bm25_index():
 
 
 def retrieve(query: str, api_key: str, k: int = 8) -> list[dict]:
-    """Return top-k most relevant Q&A entries for *query* using BM25."""
     if not query.strip():
         return []
     try:
