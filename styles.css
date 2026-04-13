@@ -160,6 +160,9 @@ html, body {
 section[data-testid="stSidebar"] {
     height: 100vh !important;
     max-height: 100vh !important;
+    width: clamp(240px, 24vw, 320px) !important;
+    min-width: 220px !important;
+    max-width: 320px !important;
     flex-shrink: 0 !important;
     overflow: hidden !important;
     display: flex !important;
@@ -171,10 +174,14 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid var(--glass-border);
     color: var(--text-primary);
     z-index: 999 !important;
-    /* Removed fixed width to use default Streamlit sizing */
 }
 /* Inner content div scrolls independently */
 section[data-testid="stSidebar"] > div {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
     flex: 1 1 auto !important;
     min-height: 0 !important;
     overflow-y: auto !important;
@@ -237,6 +244,8 @@ section[data-testid="stSidebar"] hr {
     opacity: 0.12;
     pointer-events: none;
     z-index: 0;
+    width: min(14rem, 45%) !important;
+    aspect-ratio: 1 / 1 !important;
     animation: chakra-spin 60s linear infinite;
 }
 @keyframes chakra-spin {
