@@ -399,6 +399,50 @@ button[kind="headerNoPadding"] {
     left: 10px !important;
     z-index: 1001 !important;
 }
+
+/* --- Independent sidebar scrolling (minimal, non-invasive) ---
+   - Prevent the whole page from scrolling
+   - Fix main content area and keep it non-scrollable
+   - Make the sidebar a fixed-height column with its own vertical scroll
+   Notes: uses !important sparingly to override Streamlit defaults only
+*/
+html, body, .stApp, [data-testid="stAppViewContainer"] {
+    height: 100%;
+    overflow: hidden !important; /* disable page-level scroll */
+}
+
+section[data-testid="stSidebar"] {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 22rem !important; /* visual width for sidebar; adjust if needed */
+    overflow-y: auto !important; /* sidebar scrolls independently */
+    -webkit-overflow-scrolling: touch !important;
+    z-index: 999 !important;
+}
+
+/* Keep the main app area fixed and non-scrolling, occupying the remaining space */
+[data-testid="stAppViewContainer"] > div[role="main"],
+[data-testid="stMain"] {
+    margin-left: 22rem !important; /* same width as sidebar */
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    overflow: hidden !important; /* prevent main from scrolling */
+    height: 100vh !important;
+}
+
+[data-testid="stMainBlockContainer"] {
+    overflow: hidden !important;
+    height: 100% !important;
+}
+
+/* Ensure the fixed chat input bar or other fixed footers are still visible */
+[data-testid="stBottom"], [data-testid="stBottomBlockContainer"] {
+    z-index: 1000 !important;
+}
 [data-testid="stSidebarCollapsedControl"] button {
     background: linear-gradient(135deg, #1B1464, #0C2340) !important;
     color: white !important;
