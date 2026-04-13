@@ -8,7 +8,7 @@ from google import genai
 from google.genai.types import GenerateContentConfig
 
 # ── Constants ────────────────────────────────────────────────────────────────
-MODEL = "gemini-3-flash-preview"
+MODEL = "gemini-2.0-flash"
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 MAX_OUTPUT_TOKENS = 4096

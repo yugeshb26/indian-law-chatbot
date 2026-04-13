@@ -30,7 +30,7 @@ API_KEY = API_KEYS[0]
 st.set_page_config(
     page_title="Indian Law Chatbot",
     page_icon="⚖️",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 
@@ -509,7 +509,7 @@ if st.session_state.messages and not st.session_state.pending_response:
 
 # ── Streaming helper ─────────────────────────────────────────────────────────
 
-def stream_and_display(messages_for_api: list[dict]) -> str:
+def stream_and_display(messages_for_api: list[dict], system_prompt: str = "") -> str:
     """Stream Gemini response with live display, return full text."""
     # Single placeholder for both loading state and streaming reply.
     # Using one container avoids the flash/jump between two empty()s.
@@ -530,7 +530,7 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
     start = time.time()
 
     try:
-        for chunk in stream_response(API_KEY, SYSTEM_PROMPT, messages_for_api):
+        for chunk in stream_response(API_KEY, system_prompt, messages_for_api):
             full_response += chunk
             # Hide the <chart> JSON block while it's being streamed so the
             # user only sees prose — chart is rendered properly at the end.
@@ -598,7 +598,7 @@ if st.session_state.pending_response and st.session_state.messages:
     for m in st.session_state.messages[1:]:
         api_messages.append(m)
 
-    reply = stream_and_display(api_messages)
+    reply = stream_and_display(api_messages, system_prompt)
 
     if reply:
         st.session_state.messages.append({"role": "assistant", "content": reply})
