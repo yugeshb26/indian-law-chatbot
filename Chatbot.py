@@ -13,7 +13,6 @@ from gemini_engine import stream_response, regenerate_response, generate_title, 
 from icons import icon
 from animations import inject_animations
 from chart_renderer import parse_chart_from_response, truncate_at_chart_tag, render_chart
-from rag import retrieve, format_context, index_ready
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # API keys: try environment variable first (Render), then Streamlit secrets
@@ -24,6 +23,7 @@ else:
     API_KEYS = list(st.secrets["GEMINI_API_KEYS"])
 rotator = init_rotator(API_KEYS)
 API_KEY = API_KEYS[0]
+DATASET_PATH = "Alpie-core_core_indian_law.json"
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -81,10 +81,24 @@ st.markdown(f"<style>{load_css()}</style>", unsafe_allow_html=True)
 # ── Animation layer (GSAP + Three.js particles + Anime.js ripple) ───────────
 inject_animations()
 
-# ── Base system prompt (no static context — RAG injects per-query) ───────────
-_RAG_MODE = "vector" if index_ready() else "BM25 keyword"
+# ── Load dataset ─────────────────────────────────────────────────────────────
+@st.cache_resource
+def load_context() -> str:
+    with open(DATASET_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    # Load up to 200 entries for rich context (BNS, BNSS, BSA, Constitution)
+    return "\n".join(
+        f"Q: {item['prompt']}\nA: {item['response']}"
+        for item in data[:200]
+    )
 
-BASE_SYSTEM_PROMPT = (
+try:
+    dataset_context = load_context()
+except FileNotFoundError:
+    st.error(f"File not found: `{DATASET_PATH}`")
+    st.stop()
+
+SYSTEM_PROMPT = (
     "You are an expert Indian Law Chatbot assistant with comprehensive knowledge of "
     "Indian legal provisions, acts, and regulations.\n\n"
     "Your responsibilities:\n"
@@ -119,26 +133,9 @@ BASE_SYSTEM_PROMPT = (
     "- Add a chart ONLY when it genuinely clarifies numeric or comparative information.\n"
     "- Do NOT add a chart for simple factual/definition questions.\n"
     "- The chart block must be valid JSON — no trailing commas, no comments.\n"
-    "- Include at least 3 data points in a chart.\n"
+    "- Include at least 3 data points in a chart.\n\n"
+    "Dataset Context:\n" + dataset_context
 )
-
-
-def build_system_prompt(user_question: str) -> str:
-    """Build a system prompt with RAG context retrieved for *user_question*.
-
-    Retrieves the 8 most relevant Q&A pairs from the full 15 K-entry dataset
-    and injects them as grounding context.  Falls back gracefully if retrieval
-    fails (prompt still works, just without dataset context).
-    """
-    results = retrieve(user_question, API_KEY, k=8)
-    context = format_context(results)
-    if context:
-        return (
-            BASE_SYSTEM_PROMPT
-            + "\n\nRelevant Legal Context (retrieved from dataset):\n"
-            + context
-        )
-    return BASE_SYSTEM_PROMPT
 
 # ── Markdown + bubble rendering helpers ─────────────────────────────────────
 import html as _html
@@ -206,48 +203,30 @@ def bot_bubble_html(content: str, streaming: bool = False) -> str:
     )
 
 
-def _snap_js(force: bool) -> str:
-    """Shared JS: call __aetherSnap if ready, else scroll last chat element into view.
-
-    Uses scrollTop assignment (not scrollTo) for max cross-browser compat.
-    Retries at 150 ms, 400 ms, and 900 ms to survive Streamlit's async DOM updates.
-    """
-    force_str = "true" if force else "false"
-    return f"""<script>
-    (function() {{
-        var P  = window.parent;
-        var PD = P.document;
-        function getScroller() {{
-            return PD.querySelector('[data-testid="stMainBlockContainer"]') ||
-                   PD.querySelector('.main .block-container') ||
-                   PD.querySelector('[data-testid="stMain"]');
-        }}
-        function snap() {{
-            if (P.__aetherSnap) {{
-                P.__aetherSnap({force_str});
-                return;
-            }}
-            // Fallback: direct scrollTop assignment (works in Safari/Firefox)
-            var el = getScroller();
-            if (el) el.scrollTop = el.scrollHeight;
-        }}
-        // Fire immediately, then retry after Streamlit finishes its DOM work
-        snap();
-        P.setTimeout(snap, 150);
-        P.setTimeout(snap, 400);
-        P.setTimeout(snap, 900);
-    }})();
-    </script>"""
-
-
 def scroll_to_bottom():
-    """Snap to bottom after history renders (doesn't reset pause flag)."""
-    st.iframe(_snap_js(force=False), height=0)
+    """Scroll the parent (Streamlit) page to the bottom.
 
-
-def start_scroll_tracker():
-    """Force-snap to bottom and clear any pause flag before streaming starts."""
-    st.iframe(_snap_js(force=True), height=0)
+    st.markdown strips <script> tags, so we inject via components.html
+    which renders inside an iframe; we then walk up to window.parent
+    and scroll its document. The iframe itself is 0px tall so it's
+    invisible.
+    """
+    st.iframe(
+        """
+        <script>
+            const scroll = () => {
+                const doc = window.parent.document;
+                doc.documentElement.scrollTo({
+                    top: doc.documentElement.scrollHeight,
+                    behavior: 'smooth'
+                });
+            };
+            scroll();
+            setTimeout(scroll, 250);
+        </script>
+        """,
+        height=0,
+    )
 
 
 # ── Session state init ───────────────────────────────────────────────────────
@@ -255,8 +234,7 @@ def start_scroll_tracker():
 for _key, _default in [
     ("active_chat_id", None),
     ("messages", []),
-    ("pending_response", False),
-    ("api_error", None),
+    ("pending_response", False),  # True while we still need to stream a reply
 ]:
     if _key not in st.session_state:
         st.session_state[_key] = _default
@@ -448,11 +426,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Persisted API error (survives st.rerun()) ────────────────────────────────
-if st.session_state.api_error:
-    st.error(f"API Error — {st.session_state.api_error}", icon="🚨")
-    st.session_state.api_error = None
-
 # ── Hero Banner + Welcome Cards (only when no messages) ─────────────────────
 if not st.session_state.messages:
     st.markdown(
@@ -514,7 +487,7 @@ if st.session_state.messages and not st.session_state.pending_response:
 
 # ── Streaming helper ─────────────────────────────────────────────────────────
 
-def stream_and_display(messages_for_api: list[dict], system_prompt: str = "") -> str:
+def stream_and_display(messages_for_api: list[dict]) -> str:
     """Stream Gemini response with live display, return full text."""
     # Single placeholder for both loading state and streaming reply.
     # Using one container avoids the flash/jump between two empty()s.
@@ -535,7 +508,7 @@ def stream_and_display(messages_for_api: list[dict], system_prompt: str = "") ->
     start = time.time()
 
     try:
-        for chunk in stream_response(API_KEY, system_prompt, messages_for_api):
+        for chunk in stream_response(API_KEY, SYSTEM_PROMPT, messages_for_api):
             full_response += chunk
             # Hide the <chart> JSON block while it's being streamed so the
             # user only sees prose — chart is rendered properly at the end.
@@ -571,7 +544,7 @@ def stream_and_display(messages_for_api: list[dict], system_prompt: str = "") ->
             st.warning(f"Response may be incomplete ({elapsed:.1f}s). Click 'Continue' to extend.")
             return clean_text
         placeholder.empty()
-        st.session_state.api_error = str(e)[:300]
+        st.error(f"Failed to get response: {str(e)[:200]}")
         return ""
 
 
@@ -581,29 +554,21 @@ def stream_and_display(messages_for_api: list[dict], system_prompt: str = "") ->
 if st.session_state.pending_response and st.session_state.messages:
     chat_id = st.session_state.active_chat_id
 
-    # Start the continuous scroll tracker — it snaps to bottom immediately
-    # and then follows page-height growth every 120 ms throughout streaming.
-    start_scroll_tracker()
-
-    # Retrieve context relevant to the LATEST user question (not the first),
-    # so each turn gets fresh grounding from the full 15 K-entry dataset.
-    latest_question = next(
-        (m["content"] for m in reversed(st.session_state.messages) if m["role"] == "user"),
-        st.session_state.messages[0]["content"],
-    )
-    system_prompt = build_system_prompt(latest_question)
+    # Scroll into view BEFORE the streaming starts so the user sees their
+    # just-submitted question and the loading bubble.
+    scroll_to_bottom()
 
     # Build API messages from full history
     api_messages = [
         {
             "role": "user",
-            "content": system_prompt + "\n\nUser: " + st.session_state.messages[0]["content"],
+            "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"],
         }
     ]
     for m in st.session_state.messages[1:]:
         api_messages.append(m)
 
-    reply = stream_and_display(api_messages, system_prompt)
+    reply = stream_and_display(api_messages)
 
     if reply:
         st.session_state.messages.append({"role": "assistant", "content": reply})

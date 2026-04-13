@@ -33,15 +33,12 @@ _SCRIPT = """
         PD.head.appendChild(s);
     }
 
-    // ── 1. Ensure programmatic scrolls are always instant ────────────────
-    // Do NOT inject scroll-behavior:smooth — it fights the Python-side
-    // scroll tracker which needs instant positioning during streaming.
+    // ── 1. Inject smooth-scroll CSS into parent ───────────────────────────
     (function injectScrollCSS() {
         if (PD.getElementById('aether-smooth-scroll')) return;
         var style = PD.createElement('style');
         style.id  = 'aether-smooth-scroll';
-        // Anchor-link clicks get smooth scroll; JS scrollTo stays instant
-        style.textContent = 'a[href^="#"] { scroll-behavior: smooth; }';
+        style.textContent = 'html { scroll-behavior: smooth !important; }';
         PD.head.appendChild(style);
     })();
 
@@ -285,114 +282,15 @@ _SCRIPT = """
         obs.observe(PD.body, { childList: true, subtree: true });
     }
 
-    // ── 5. Auto-scroll — robust multi-strategy scroll engine ─────────────────
-    //
-    // Design goals:
-    //   • Survive Streamlit DOM replacement on every rerun (the old
-    //     stMainBlockContainer node is discarded; a fresh one is mounted).
-    //   • Never fire on sidebar interactions (sidebar is a separate scroll node).
-    //   • Respect user scroll-up (pause auto-scroll while reading, resume
-    //     when they scroll back near the bottom).
-    //   • Work in Chrome, Firefox, and Safari (incl. strict cross-origin mode).
-
-    function setupAutoScroll() {
-        // Always (re)register __aetherSnap so EVERY rerun gets a fresh closure
-        // pointing at the *current* live DOM node.
-        P.__aetherScrollPaused = P.__aetherScrollPaused || false;
-
-        // Always returns the LIVE element — called at snap time, not cached.
-        function getChatScroller() {
-            // Try the precise block container first, then the outer main panel.
-            return PD.querySelector('[data-testid="stMainBlockContainer"]') ||
-                   PD.querySelector('.main .block-container') ||
-                   PD.querySelector('[data-testid="stMain"]');
-        }
-
-        // ── Core snap: scrolls the container to its very bottom ──────────────
-        function doSnap(force) {
-            if (force) P.__aetherScrollPaused = false;
-            if (P.__aetherScrollPaused) return;
-            var scroller = getChatScroller();
-            if (!scroller) return;
-            // Use scrollTop rather than scrollTo({behavior}) for max compat.
-            scroller.scrollTop = scroller.scrollHeight;
-        }
-
-        // Expose globally so Chatbot.py's _snap_js can call it too.
-        P.__aetherSnap = doSnap;
-
-        // ── Pause / resume based on scroll direction ─────────────────────────
-        function attachScrollPause(scroller) {
-            if (scroller.__aetherPauseWired) return;
-            scroller.__aetherPauseWired = true;
-            var last = scroller.scrollTop;
-            scroller.addEventListener('scroll', function() {
-                var dist = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-                var up   = scroller.scrollTop < last;
-                last     = scroller.scrollTop;
-                // User scrolled up more than 80px → pause
-                if (up && dist > 80)  P.__aetherScrollPaused = true;
-                // User is within 40px of bottom → resume
-                if (dist < 40)        P.__aetherScrollPaused = false;
-            }, { passive: true });
-        }
-
-        // ── ResizeObserver — reconnected on every rerun ───────────────────────
-        // Streamlit replaces the DOM on each rerun, so we use a MutationObserver
-        // to detect when stMainBlockContainer appears (after each rerun) and
-        // attach a fresh ResizeObserver to it. The old RO is GC'd with its node.
-        var _activeBlock  = null;
-        var _activeRO     = null;
-
-        function connectToBlock(block) {
-            if (block === _activeBlock) return; // same node, already watching
-            if (_activeRO) { _activeRO.disconnect(); _activeRO = null; }
-            _activeBlock = block;
-            attachScrollPause(block);
-
-            _activeRO = new P.ResizeObserver(function() {
-                if (P.__aetherScrollPaused) return;
-                P.requestAnimationFrame(function() { doSnap(false); });
-            });
-            _activeRO.observe(block);
-
-            // Snap immediately after connecting to new node
-            P.requestAnimationFrame(function() { doSnap(false); });
-        }
-
-        // Watch for stMainBlockContainer appearing or being replaced.
-        var domWatcher = new P.MutationObserver(function() {
-            var block = getChatScroller();
-            if (block) connectToBlock(block);
-        });
-        domWatcher.observe(PD.body, { childList: true, subtree: true });
-
-        // Connect immediately if the element already exists.
-        var existing = getChatScroller();
-        if (existing) connectToBlock(existing);
-
-        // Mark one-time init done but do NOT block re-registration above.
-        P.__aetherScrollInit = true;
-    }
-
     // ── Bootstrap: load libs then initialise ─────────────────────────────
-    // On every Streamlit rerun we MUST:
-    //   1. Re-run GSAP so new message rows get entrance animations.
-    //   2. Re-run setupAutoScroll so the ResizeObserver connects to the
-    //      *new* stMainBlockContainer (Streamlit replaces it each rerun).
-    //   3. Snap to the bottom immediately.
-    // We skip re-loading the CDN scripts (libs are cached on window.parent).
+    // Guard against re-running on Streamlit hot-reload
     if (P.__aetherAnimInit) {
+        // Libs already loaded — just re-run GSAP for new elements
         if (P.gsap)  setupGSAP();
         if (P.anime) setupAnime();
-        setupAutoScroll();          // reconnect RO to fresh DOM node
-        if (P.__aetherSnap) P.__aetherSnap(false);
         return;
     }
     P.__aetherAnimInit = true;
-
-    // First load — set up auto-scroll immediately (no lib dependency)
-    setupAutoScroll();
 
     // Load Three.js first so particles start ASAP
     loadInParent('""" + _THREE_URL + """', 'aether-three', function() {
