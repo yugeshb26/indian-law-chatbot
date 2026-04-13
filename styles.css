@@ -1564,40 +1564,60 @@ section[data-testid="stSidebar"] {
     transition: width 0.3s ease !important;
 }
 
-/* ── Mobile: cancel every custom rule that touches sidebar layout so
-   Streamlit's native slide-open/slide-close works unchanged (≤768px) */
+/* ── Mobile sidebar: full-overlay with clean slide-off (≤768px) ─────── */
 @media (max-width: 768px) {
-    /* Kill all the desktop scroll/flex locks */
+    /* Undo desktop flex/scroll locks on the containers */
     html, body, .stApp, [data-testid="stAppViewContainer"] {
-        display: revert !important;
+        display: block !important;
+        flex-direction: initial !important;
         height: auto !important;
         max-height: none !important;
         overflow: auto !important;
-        flex-direction: initial !important;
     }
-    /* Release every property we set on the sidebar at desktop scope.
-       `all: revert` pulls these rules out of the cascade so Streamlit's
-       built-in mobile stylesheet (fixed overlay + translateX close) is
-       what actually runs. */
+
+    /* Pin the sidebar as a fixed overlay so translateX fully removes it */
     section[data-testid="stSidebar"] {
-        position: revert !important;
-        height: revert !important;
-        max-height: revert !important;
-        overflow: revert !important;
-        flex-shrink: revert !important;
-        transition: revert !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        width: min(85vw, 320px) !important;
+        min-width: 0 !important;
+        max-width: 85vw !important;
+        overflow: hidden !important;
+        flex-shrink: 0 !important;
+        z-index: 999999 !important;
+        transform: translateX(0);
+        transition: transform 0.3s ease, visibility 0.3s ease !important;
+        will-change: transform;
     }
-    /* Free stMain from the desktop flex/margin-left rules */
-    [data-testid="stMain"] {
-        flex: revert !important;
-        width: auto !important;
-        max-width: none !important;
+
+    /* CLOSED state — slide fully off-screen and disable pointer events.
+       Using calc() with a big offset guarantees nothing peeks through
+       regardless of the computed sidebar width.  Covers every flavour
+       of closed-state marker Streamlit uses across versions. */
+    section[data-testid="stSidebar"][aria-expanded="false"],
+    section[data-testid="stSidebar"][aria-hidden="true"],
+    section[data-testid="stSidebar"].collapsed,
+    section[data-testid="stSidebar"][data-collapsed="true"] {
+        transform: translateX(-105%) !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        box-shadow: none !important;
+    }
+
+    /* Main takes the whole viewport on mobile — no reserved sidebar gap */
+    [data-testid="stMain"],
+    [data-testid="stAppViewContainer"] > div[role="main"] {
+        flex: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
         margin-left: 0 !important;
+        padding-left: 0 !important;
         height: auto !important;
         max-height: none !important;
         overflow: visible !important;
-    }
-    [data-testid="stAppViewContainer"] > div[role="main"] {
-        margin-left: 0 !important;
     }
 }
