@@ -1564,44 +1564,40 @@ section[data-testid="stSidebar"] {
     transition: width 0.3s ease !important;
 }
 
-/* ── Mobile: fully revert desktop push-layout & let Streamlit's native
-   slide-close handle the sidebar (≤768px) ──────────────────────────── */
+/* ── Mobile: cancel every custom rule that touches sidebar layout so
+   Streamlit's native slide-open/slide-close works unchanged (≤768px) */
 @media (max-width: 768px) {
-    /* Undo every desktop rule that interferes with native mobile slide */
-    [data-testid="stAppViewContainer"] {
-        display: block !important;
+    /* Kill all the desktop scroll/flex locks */
+    html, body, .stApp, [data-testid="stAppViewContainer"] {
+        display: revert !important;
         height: auto !important;
         max-height: none !important;
-        overflow: visible !important;
-    }
-    html, body, .stApp {
         overflow: auto !important;
-        height: auto !important;
-        max-height: none !important;
+        flex-direction: initial !important;
     }
+    /* Release every property we set on the sidebar at desktop scope.
+       `all: revert` pulls these rules out of the cascade so Streamlit's
+       built-in mobile stylesheet (fixed overlay + translateX close) is
+       what actually runs. */
     section[data-testid="stSidebar"] {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        bottom: 0 !important;
-        height: 100vh !important;
-        z-index: 1000 !important;
-        flex-shrink: initial !important;
-        transition: transform 0.3s ease !important;
+        position: revert !important;
+        height: revert !important;
+        max-height: revert !important;
+        overflow: revert !important;
+        flex-shrink: revert !important;
+        transition: revert !important;
     }
-    /* When Streamlit marks the sidebar collapsed, force the slide-out */
-    section[data-testid="stSidebar"][aria-expanded="false"],
-    section[data-testid="stSidebar"][aria-hidden="true"] {
-        transform: translateX(-100%) !important;
-        visibility: hidden !important;
-    }
+    /* Free stMain from the desktop flex/margin-left rules */
     [data-testid="stMain"] {
-        flex: none !important;
-        width: 100% !important;
-        max-width: 100% !important;
+        flex: revert !important;
+        width: auto !important;
+        max-width: none !important;
         margin-left: 0 !important;
         height: auto !important;
         max-height: none !important;
         overflow: visible !important;
+    }
+    [data-testid="stAppViewContainer"] > div[role="main"] {
+        margin-left: 0 !important;
     }
 }
