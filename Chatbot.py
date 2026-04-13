@@ -225,7 +225,7 @@ def scroll_to_bottom():
             setTimeout(scroll, 250);
         </script>
         """,
-        height=0,
+        height=1,
     )
 
 

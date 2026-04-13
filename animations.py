@@ -319,4 +319,4 @@ def inject_animations() -> None:
     the guard flag ``window.__aetherAnimInit`` prevents double-init while
     still re-running GSAP on each rerun so new messages get animated).
     """
-    st.iframe(_SCRIPT, height=0)
+    st.iframe(_SCRIPT, height=1)
