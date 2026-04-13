@@ -442,6 +442,38 @@ section[data-testid="stSidebar"] {
     height: 100% !important;
 }
 
+/* --- Responsive: adjust main area when sidebar is collapsed ---
+   Uses :has() where available to detect sidebar hidden/collapsed states.
+   Fallbacks attempt to catch inline transform or aria-hidden markers.
+*/
+:root { --sidebar-width: 22rem; }
+
+/* Default: main area accounts for sidebar width */
+[data-testid="stAppViewContainer"] > div[role="main"],
+[data-testid="stMain"] {
+    margin-left: var(--sidebar-width) !important;
+}
+
+/* If sidebar is hidden/collapsed (modern browsers supporting :has) */
+.stApp:has(section[data-testid="stSidebar"][aria-hidden="true"]) [data-testid="stAppViewContainer"] > div[role="main"],
+.stApp:has(section[data-testid="stSidebar"][style*="translateX(-"]) [data-testid="stAppViewContainer"] > div[role="main"] {
+    margin-left: 0 !important;
+}
+
+/* Additional heuristic: if the small collapsed-open control is visible at left,
+   Streamlit often hides the sidebar; detect its presence and collapse main. */
+.stApp:has([data-testid="stSidebarCollapsedControl"]) [data-testid="stAppViewContainer"] > div[role="main"] {
+    /* Only collapse when the small control is the only visible sidebar affordance.
+       This rule is conservative: it nudges main left to zero to avoid overlap. */
+    margin-left: 0 !important;
+}
+
+/* Smooth transition when sidebar opens/closes */
+[data-testid="stAppViewContainer"] > div[role="main"],
+[data-testid="stMain"] {
+    transition: margin-left 220ms ease !important;
+}
+
 /* Ensure the fixed chat input bar or other fixed footers are still visible */
 [data-testid="stBottom"], [data-testid="stBottomBlockContainer"] {
     z-index: 1000 !important;
