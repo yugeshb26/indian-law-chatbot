@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 import time
 import base64
@@ -211,7 +212,7 @@ def scroll_to_bottom():
     and scroll its document. The iframe itself is 0px tall so it's
     invisible.
     """
-    st.iframe(
+    components.html(
         """
         <script>
             const scroll = () => {
@@ -225,7 +226,7 @@ def scroll_to_bottom():
             setTimeout(scroll, 250);
         </script>
         """,
-        height=1,
+        height=0,
     )
 
 
