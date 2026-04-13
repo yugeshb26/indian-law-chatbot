@@ -8,7 +8,7 @@ document via a 0-height iframe, then sets up:
   • Anime.js ripple micro-interaction on all action buttons
   • CSS scroll-behavior: smooth injected into parent
 """
-import streamlit.components.v1 as components
+import streamlit as st
 
 # CDN URLs (pinned versions for stability)
 _GSAP_URL  = "https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
@@ -421,4 +421,4 @@ def inject_animations() -> None:
     the guard flag ``window.__aetherAnimInit`` prevents double-init while
     still re-running GSAP on each rerun so new messages get animated).
     """
-    components.html(_SCRIPT, height=0)
+    st.iframe(_SCRIPT, height=0)

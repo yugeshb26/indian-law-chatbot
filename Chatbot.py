@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import json
 import time
 import base64
@@ -243,12 +242,12 @@ def _snap_js(force: bool) -> str:
 
 def scroll_to_bottom():
     """Snap to bottom after history renders (doesn't reset pause flag)."""
-    components.html(_snap_js(force=False), height=0)
+    st.iframe(_snap_js(force=False), height=0)
 
 
 def start_scroll_tracker():
     """Force-snap to bottom and clear any pause flag before streaming starts."""
-    components.html(_snap_js(force=True), height=0)
+    st.iframe(_snap_js(force=True), height=0)
 
 
 # ── Session state init ───────────────────────────────────────────────────────
