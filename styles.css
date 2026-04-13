@@ -1563,3 +1563,26 @@ section[data-testid="stSidebar"] {
     min-width: 0 !important;
     transition: width 0.3s ease !important;
 }
+
+/* ── Mobile: restore sidebar overlay behavior (≤768px) ────────────────
+   On desktop we want the sidebar to push the main content (flex row).
+   On mobile that breaks the close animation — the sidebar should slide
+   OVER the content instead. Undo the flex push-layout and let Streamlit's
+   native transform-based slide handle open/close. */
+@media (max-width: 768px) {
+    [data-testid="stAppViewContainer"] {
+        display: block !important;
+    }
+    section[data-testid="stSidebar"] {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        height: 100vh !important;
+        z-index: 1000 !important;
+    }
+    [data-testid="stMain"] {
+        flex: none !important;
+        width: 100% !important;
+        margin-left: 0 !important;
+    }
+}
