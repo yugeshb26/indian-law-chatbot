@@ -60,8 +60,22 @@ html, body {
     background: var(--bg-deep) !important;
 }
 
-/* Hide Streamlit header bar */
-[data-testid="stHeader"] { display: none !important; }
+/* Collapse header to 0 height — keeps sidebar toggle in its normal render position */
+[data-testid="stHeader"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+}
+/* Hide only the toolbar content inside the header (branding, deploy btn, status) */
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"] {
+    display: none !important;
+}
 
 /* 4. Main area — flex column filling remaining width */
 [data-testid="stMain"] {
@@ -79,12 +93,14 @@ html, body {
 [data-testid="stMainBlockContainer"],
 .main .block-container,
 .stMainBlockContainer {
-    flex: 1 1 auto !important;
+    flex: 1 1 0% !important;    /* 0% base-size forces flex-grow to fill remaining height */
+    height: 0 !important;       /* prevents intrinsic height from overriding flex-grow */
     min-height: 0 !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     background: transparent !important;
     color: var(--text-primary) !important;
+    padding-top: 1rem !important;   /* override Streamlit's large default top padding */
     padding-bottom: 5rem !important;
     /* Desktop max-width — centered like ChatGPT */
     max-width: min(860px, calc(100vw - 320px)) !important;
@@ -165,7 +181,7 @@ section[data-testid="stSidebar"] {
     max-width: 320px !important;
     flex: 0 0 auto !important;
     box-sizing: border-box !important;
-    overflow: hidden !important;
+    overflow: visible !important;
     display: flex !important;
     flex-direction: column !important;
     background:

@@ -257,6 +257,7 @@ for _key, _default in [
     ("active_chat_id", None),
     ("messages", []),
     ("pending_response", False),  # True while we still need to stream a reply
+    ("api_error", None),          # Persists API errors across reruns
 ]:
     if _key not in st.session_state:
         st.session_state[_key] = _default
@@ -448,6 +449,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ── Show persisted API error (survives st.rerun()) ───────────────────────────
+if st.session_state.api_error:
+    st.error(f"API Error — {st.session_state.api_error}", icon="🚨")
+    st.session_state.api_error = None
+
 # ── Hero Banner + Welcome Cards (only when no messages) ─────────────────────
 if not st.session_state.messages:
     st.markdown(
@@ -566,7 +572,7 @@ def stream_and_display(messages_for_api: list[dict], system_prompt: str = "") ->
             st.warning(f"Response may be incomplete ({elapsed:.1f}s). Click 'Continue' to extend.")
             return clean_text
         placeholder.empty()
-        st.error(f"Failed to get response: {str(e)[:200]}")
+        st.session_state.api_error = str(e)[:300]
         return ""
 
 
