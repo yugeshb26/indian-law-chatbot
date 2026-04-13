@@ -1544,3 +1544,22 @@ section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
     overflow-x: hidden !important;
     overscroll-behavior: contain !important;
 }
+
+/* ── Sidebar push-layout: main adjusts when sidebar opens/closes ─────
+   Make stAppViewContainer a flex row so the sidebar takes real layout
+   space (not an overlay). stMain then flex-fills the remaining width
+   and smoothly re-sizes when the sidebar collapses or expands. */
+[data-testid="stAppViewContainer"] {
+    display: flex !important;
+    flex-direction: row !important;
+}
+section[data-testid="stSidebar"] {
+    position: relative !important;
+    flex-shrink: 0 !important;
+    transition: width 0.3s ease, min-width 0.3s ease !important;
+}
+[data-testid="stMain"] {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    transition: width 0.3s ease !important;
+}
