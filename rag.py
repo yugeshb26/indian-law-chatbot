@@ -65,20 +65,46 @@ def _load_bm25_index():
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def retrieve(query: str, api_key: str, k: int = 8) -> list[dict]:
-    """Return top-k most relevant Q&A entries for *query*."""
+def retrieve(query: str, api_key: str, k: int = 5) -> list[dict]:
+    """Return top-k most relevant Q&A entries for *query*.
+
+    Strategy:
+      • BM25 always runs first — it is instant (no model load, no API call)
+        and great for legal queries with specific section/act names.
+      • Vector search runs only if the index exists AND the BM25 top score
+        is low (query didn't match any strong keyword hit), giving a
+        semantic fallback without adding latency on normal queries.
+    """
     if not query.strip():
         return []
 
-    # ── Vector search ─────────────────────────────────────────────────────────
+    tokens = query.lower().split()
+
+    # ── BM25 (primary — always fast) ──────────────────────────────────────────
+    try:
+        bm25, meta = _load_bm25_index()
+        scores = bm25.get_scores(tokens)
+        top_k  = min(k, len(meta))
+        idx    = np.argpartition(scores, -top_k)[-top_k:]
+        idx    = idx[np.argsort(scores[idx])[::-1]]
+        bm25_results = [meta[i] for i in idx]
+        best_bm25    = float(scores[idx[0]]) if len(idx) else 0.0
+    except Exception:
+        bm25_results, best_bm25 = [], 0.0
+
+    # If BM25 found a strong match (score > 1.0), return immediately
+    if bm25_results and best_bm25 > 1.0:
+        return bm25_results
+
+    # ── Vector search (semantic fallback — only when BM25 had no strong hit) ──
     if index_ready():
         try:
             embs, meta = _load_vector_index()
             encoder    = _load_encoder()
             q_vec = encoder.encode(
                 [query], normalize_embeddings=True, convert_to_numpy=True
-            )                                             # (1, 384)
-            scores = np.dot(embs, q_vec.T).squeeze()     # (N,)
+            )
+            scores = np.dot(embs, q_vec.T).squeeze()
             top_k  = min(k, len(meta))
             idx    = np.argpartition(scores, -top_k)[-top_k:]
             idx    = idx[np.argsort(scores[idx])[::-1]]
@@ -86,16 +112,7 @@ def retrieve(query: str, api_key: str, k: int = 8) -> list[dict]:
         except Exception:
             pass
 
-    # ── BM25 fallback ─────────────────────────────────────────────────────────
-    try:
-        bm25, meta = _load_bm25_index()
-        scores = bm25.get_scores(query.lower().split())
-        top_k  = min(k, len(meta))
-        idx    = np.argpartition(scores, -top_k)[-top_k:]
-        idx    = idx[np.argsort(scores[idx])[::-1]]
-        return [meta[i] for i in idx]
-    except Exception:
-        return []
+    return bm25_results
 
 
 def format_context(results: list[dict]) -> str:
