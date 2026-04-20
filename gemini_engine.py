@@ -10,6 +10,7 @@ from google.genai.types import GenerateContentConfig
 # ── Constants ────────────────────────────────────────────────────────────────
 MODEL = "gemini-2.0-flash"
 MAX_RETRIES = 3
+MAX_CONTINUE = 3   # max auto-continue iterations (separate from error retries)
 RETRY_DELAY = 2
 MAX_OUTPUT_TOKENS = 4096
 CONTINUE_PROMPT = "Continue your response exactly where you left off. Do not repeat what you already said."
@@ -46,8 +47,10 @@ class KeyRotator:
                     continue
                 return key
 
-            # All keys rate-limited — return least recently failed
+            # All keys rate-limited — return least recently failed and reset index past it
             oldest_key = min(self._failed, key=self._failed.get, default=self._keys[0])
+            if oldest_key in self._keys:
+                self._index = (self._keys.index(oldest_key) + 1) % len(self._keys)
             return oldest_key
 
     def mark_failed(self, key: str):
@@ -104,10 +107,12 @@ def stream_response(api_key_unused: str, system_prompt: str, messages: list[dict
         contents.append({"role": role, "parts": [{"text": msg["content"]}]})
 
     full_text = ""
-    attempt = 0
+    api_attempts = 0        # counts only actual API errors (rate-limit or other exceptions)
+    continue_count = 0      # counts successful-but-incomplete auto-continuations
     last_error = None
+    last_error_is_quota = False
 
-    while attempt < MAX_RETRIES:
+    while api_attempts < MAX_RETRIES:
         key = rotator.get_key()
         client = genai.Client(api_key=key)
 
@@ -123,43 +128,48 @@ def stream_response(api_key_unused: str, system_prompt: str, messages: list[dict
                     yield chunk.text
 
             rotator.mark_success(key)
+            # Clear stale error state — this call succeeded
+            last_error = None
+            last_error_is_quota = False
 
-            if _seems_complete(full_text):
+            if _seems_complete(full_text) or continue_count >= MAX_CONTINUE:
                 return
-            else:
-                contents.append({"role": "model", "parts": [{"text": full_text}]})
-                contents.append({"role": "user", "parts": [{"text": CONTINUE_PROMPT}]})
-                yield "\n"
-                attempt += 1
-                continue
+
+            # Response looks incomplete — continue without burning an error retry
+            contents.append({"role": "model", "parts": [{"text": full_text}]})
+            contents.append({"role": "user", "parts": [{"text": CONTINUE_PROMPT}]})
+            yield "\n"
+            continue_count += 1
+            continue
 
         except Exception as e:
             err = str(e).lower()
             last_error = e
             if "429" in err or "resource_exhausted" in err or "quota" in err:
+                last_error_is_quota = True
                 rotator.mark_failed(key)
-                attempt += 1
-                time.sleep(1)  # Quick switch to next key
+                api_attempts += 1
+                time.sleep(1)
                 continue
             else:
-                attempt += 1
-                if attempt >= MAX_RETRIES:
-                    if full_text:
-                        return
-                    raise RuntimeError(f"Gemini API failed: {str(e)[:200]}")
-                time.sleep(RETRY_DELAY * attempt)
+                last_error_is_quota = False
+                api_attempts += 1
+                if full_text:
+                    return
+                if api_attempts < MAX_RETRIES:
+                    time.sleep(RETRY_DELAY * api_attempts)
                 continue
 
-    # All retries exhausted without a successful response
+    # All API error retries exhausted
     if full_text:
         return
-    err_str = str(last_error) if last_error else ""
-    if "429" in err_str or "resource_exhausted" in err_str.lower() or "quota" in err_str.lower():
+    if last_error_is_quota:
         raise RuntimeError(
             "All API keys have hit their rate limit / daily quota. "
             "Please wait for the quota to reset (resets at midnight Pacific time for free tier) "
             "or add a new Gemini API key in .streamlit/secrets.toml."
         )
+    err_str = str(last_error) if last_error else ""
     raise RuntimeError(f"Gemini API failed after {MAX_RETRIES} retries: {err_str[:200]}")
 
 
