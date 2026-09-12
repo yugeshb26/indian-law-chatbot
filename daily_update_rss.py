@@ -1,13 +1,19 @@
 """
-Daily Indian legal data updater using Indian Kanoon RSS feeds.
+Daily Indian legal data updater using Indian Kanoon RSS feeds, plus legal-news
+feeds (LiveLaw, Bar and Bench) for developing matters that haven't reached a
+published judgment yet (e.g. a petition just filed, a probe just ordered).
 
-Source: https://indiankanoon.org/feeds/
-- No API key required
-- No rate limits
-- Official XML feeds, daily updated
-- Covers Supreme Court, all 24 High Courts, 11 tribunals, district courts
+Sources:
+- https://indiankanoon.org/feeds/ — published court judgments (no API key,
+  no rate limits). Covers Supreme Court, all 24 High Courts, 11 tribunals,
+  district courts.
+- https://www.livelaw.in/google_feeds.xml — LiveLaw legal news
+- https://www.barandbench.com/feed — Bar and Bench legal news
 
-Run daily/weekly via cron to keep dataset fresh.
+Run daily/weekly via cron to keep dataset fresh. Total dataset size is capped
+(see MAX_TOTAL_ENTRIES) — oldest scraped entries are dropped once the cap is
+exceeded, so this stays under GitHub's 100MB per-file push limit. The
+original static entries (index 0..STATIC_ENTRIES) are never dropped.
 """
 
 import json
@@ -79,6 +85,22 @@ FEEDS = {
     # Other
     "Lok Sabha Debates": f"{FEED_BASE}/loksabha/",
 }
+
+# Legal-news feeds (verified live and reachable — see git history for how
+# these URLs were confirmed). Different item shape than Kanoon (headlines,
+# not "X vs Y on <date>" case citations), so they get their own Q&A converter.
+NEWS_FEEDS = {
+    "LiveLaw": "https://www.livelaw.in/google_feeds.xml",
+    "Bar and Bench": "https://www.barandbench.com/feed",
+}
+
+# ── Dataset size cap ─────────────────────────────────────────────────────────
+# GitHub hard-blocks pushes containing a file over 100MB. The original static
+# entries (BNS/BNSS/BSA/Constitution, built by build_dataset.py) are always
+# kept; once total size exceeds the cap, the OLDEST scraped entries are
+# dropped first to make room for new ones.
+STATIC_ENTRIES = 200
+MAX_TOTAL_ENTRIES = 40_000
 
 
 # ── HTTP helper ──────────────────────────────────────────────────────────────
@@ -202,13 +224,39 @@ def items_to_qa(court_name: str, items: list[dict]) -> list[dict]:
     return qa
 
 
+def news_items_to_qa(source_name: str, items: list[dict]) -> list[dict]:
+    """Convert legal-news RSS items (LiveLaw, Bar and Bench) to Q&A pairs.
+
+    Unlike Kanoon items, these are plain headlines/summaries, not structured
+    "X vs Y on <date>" case citations — so no case-name/date extraction here.
+    """
+    qa = []
+    for item in items:
+        title = item["title"]
+        if item["description"]:
+            response = f"{source_name} reports ({item['date']}): {title}. {item['description'][:600]}"
+        else:
+            response = f"{source_name} reports ({item['date']}): {title}."
+
+        qa.append({
+            "prompt": f"What is the recent legal news: {title}?",
+            "response": response,
+        })
+        qa.append({
+            "prompt": f"Summarize this legal update: {title}",
+            "response": response,
+        })
+
+    return qa
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    print("Indian Kanoon RSS Daily Updater")
+    print("Indian Legal Data Daily Updater")
     print("=" * 60)
     print(f"Run time: {datetime.now().isoformat()}")
-    print(f"Total feeds: {len(FEEDS)}")
+    print(f"Court/tribunal feeds: {len(FEEDS)}  |  News feeds: {len(NEWS_FEEDS)}")
 
     # Load existing dataset
     if os.path.exists(OUTPUT_PATH):
@@ -236,11 +284,36 @@ def main():
         print(f"{len(items)} items → {len(qa)} Q&A")
         time.sleep(0.5)  # be polite to the server
 
+    for i, (source_name, feed_url) in enumerate(NEWS_FEEDS.items(), 1):
+        print(f"  [news {i}/{len(NEWS_FEEDS)}] {source_name}...", end=" ", flush=True)
+        xml = fetch(feed_url)
+        if not xml:
+            print("failed")
+            feed_stats[source_name] = 0
+            continue
+
+        items = parse_rss(xml)
+        qa = news_items_to_qa(source_name, items)
+        all_qa.extend(qa)
+        feed_stats[source_name] = len(items)
+        print(f"{len(items)} items → {len(qa)} Q&A")
+        time.sleep(0.5)
+
     # Deduplicate
     existing_prompts = {item["prompt"].lower().strip() for item in existing}
     unique_new = [q for q in all_qa if q["prompt"].lower().strip() not in existing_prompts]
 
     combined = existing + unique_new
+
+    # Enforce the size cap: keep the static block untouched, drop the OLDEST
+    # scraped entries first once the total exceeds MAX_TOTAL_ENTRIES.
+    dropped = 0
+    if len(combined) > MAX_TOTAL_ENTRIES:
+        static_block = combined[:STATIC_ENTRIES]
+        scraped_block = combined[STATIC_ENTRIES:]
+        keep_scraped = max(0, MAX_TOTAL_ENTRIES - STATIC_ENTRIES)
+        dropped = len(scraped_block) - keep_scraped
+        combined = static_block + scraped_block[-keep_scraped:]
 
     print(f"\n{'=' * 60}")
     print("RESULTS:")
@@ -248,18 +321,20 @@ def main():
     print(f"  Total scraped:       {len(all_qa)}")
     print(f"  Unique new entries:  {len(unique_new)}")
     print(f"  Duplicates skipped:  {len(all_qa) - len(unique_new)}")
+    if dropped:
+        print(f"  Oldest entries dropped (size cap): {dropped}")
     print(f"  TOTAL DATASET:       {len(combined)}")
 
     print(f"\n  Top contributing feeds:")
-    for court, count in sorted(feed_stats.items(), key=lambda x: -x[1])[:10]:
-        print(f"    {count:>4}  {court}")
+    for source, count in sorted(feed_stats.items(), key=lambda x: -x[1])[:10]:
+        print(f"    {count:>4}  {source}")
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(combined, f, indent=2, ensure_ascii=False)
 
     size_kb = os.path.getsize(OUTPUT_PATH) / 1024
     print(f"\n  Saved to {OUTPUT_PATH}")
-    print(f"  File size: {size_kb:.1f} KB")
+    print(f"  File size: {size_kb:.1f} KB ({size_kb/1024:.1f} MB)")
 
 
 if __name__ == "__main__":
