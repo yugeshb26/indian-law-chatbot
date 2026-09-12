@@ -493,17 +493,19 @@ if st.session_state.api_error:
             '<div class="quota-banner">'
             f'{icon("alert", size=22)}'
             '<div class="quota-body">'
-            '<strong>API quota exhausted</strong>'
-            '<p>All Gemini API keys have hit their daily rate limit. '
-            'Please wait until the quota resets (midnight Pacific time for the free tier) '
-            'or add a new API key from '
+            '<strong>API Rate Limit Reached</strong>'
+            '<p>All Gemini API keys are currently throttled or out of quota. '
+            'This often resets after 60 seconds of inactivity on the free tier. '
+            'If the issue persists, please add a new API key from '
             '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</p>'
             '</div>'
             '</div>',
             unsafe_allow_html=True,
         )
+    elif _err["type"] == "failure":
+        st.error(f"Gemini API Error: {_err['msg'].replace('API_FAILURE:', '').strip()}")
     else:
-        st.error(f"Failed to get response: {_err['msg']}")
+        st.error(f"Unexpected error: {_err['msg']}")
 
 # Auto-scroll the page to the latest message after a normal render.
 # Skipped while streaming so the placeholder doesn't fight the scroll.
@@ -575,16 +577,17 @@ def stream_and_display(messages_for_api: list[dict]) -> str:
         # that happens right after this function returns. Rendering directly
         # here would be wiped by the rerun before the user ever sees it.
         err_msg = str(e)
-        err_lower = err_msg.lower()
-        if (
-            "rate limit" in err_lower
-            or "quota" in err_lower
-            or "429" in err_lower
-            or "resource_exhausted" in err_lower
-        ):
+        if "API_QUOTA_EXHAUSTED" in err_msg:
             st.session_state.api_error = {"type": "quota", "msg": err_msg}
+        elif "API_FAILURE" in err_msg:
+            st.session_state.api_error = {"type": "failure", "msg": err_msg}
         else:
-            st.session_state.api_error = {"type": "generic", "msg": err_msg[:300]}
+            # Fallback for unexpected errors
+            err_lower = err_msg.lower()
+            if any(term in err_lower for term in ["rate limit", "quota", "429", "resource_exhausted"]):
+                st.session_state.api_error = {"type": "quota", "msg": err_msg}
+            else:
+                st.session_state.api_error = {"type": "generic", "msg": err_msg[:300]}
         return ""
 
 
