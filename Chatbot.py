@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json
+import re
 import time
 import base64
 import os
@@ -84,14 +85,60 @@ inject_animations()
 
 # ── Load dataset ─────────────────────────────────────────────────────────────
 @st.cache_resource
-def load_context() -> str:
+def load_full_dataset() -> list[dict]:
     with open(DATASET_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    # Load up to 200 entries for rich context (BNS, BNSS, BSA, Constitution)
+        return json.load(f)
+
+
+@st.cache_resource
+def load_context() -> str:
+    # First 200 entries only: the foundational statutory content (BNS, BNSS,
+    # BSA, Constitution) built by build_dataset.py. This stays static as the
+    # always-on system-prompt grounding.
+    data = load_full_dataset()
     return "\n".join(
         f"Q: {item['prompt']}\nA: {item['response']}"
         for item in data[:200]
     )
+
+
+_SEARCH_STOPWORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "what", "who", "when",
+    "where", "how", "why", "and", "or", "of", "in", "on", "for", "to",
+    "case", "about", "did", "does", "with", "that", "this", "recent",
+}
+
+
+@st.cache_resource
+def _search_corpus() -> list[str]:
+    data = load_full_dataset()
+    return [
+        (item.get("prompt", "") + " " + item.get("response", "")).lower()
+        for item in data
+    ]
+
+
+def search_dataset(query: str, top_k: int = 3, min_score: int = 4) -> list[dict]:
+    """Keyword-overlap search across the FULL dataset (not just the static
+    first-200 window), so daily-appended case-law/news updates can actually
+    surface as grounding context for a given question."""
+    words = [
+        w for w in re.findall(r"[a-z0-9]+", query.lower())
+        if len(w) > 2 and w not in _SEARCH_STOPWORDS
+    ]
+    if not words:
+        return []
+
+    data = load_full_dataset()
+    corpus = _search_corpus()
+    scored = []
+    for i, text in enumerate(corpus):
+        score = sum(text.count(w) for w in words)
+        if score >= min_score:
+            scored.append((score, i))
+    scored.sort(reverse=True)
+    return [data[i] for _, i in scored[:top_k]]
+
 
 try:
     dataset_context = load_context()
@@ -601,6 +648,19 @@ if st.session_state.pending_response and st.session_state.messages:
     # just-submitted question and the loading bubble.
     scroll_to_bottom()
 
+    # Retrieve grounding for the CURRENT question from the full dataset (not
+    # just the static first-200 window) — this is what lets daily-scraped
+    # case-law/news updates actually reach the model, on every turn.
+    current_question = st.session_state.messages[-1]["content"]
+    retrieved = search_dataset(current_question)
+    retrieved_block = ""
+    if retrieved:
+        retrieved_block = (
+            "\n\nRelevant dataset entries retrieved for this question "
+            "(may include recent updates — verify critical facts independently):\n"
+            + "\n".join(f"Q: {r['prompt']}\nA: {r['response'][:800]}" for r in retrieved)
+        )
+
     # Build API messages from full history
     api_messages = [
         {
@@ -608,8 +668,15 @@ if st.session_state.pending_response and st.session_state.messages:
             "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"],
         }
     ]
-    for m in st.session_state.messages[1:]:
+    for m in st.session_state.messages[1:-1]:
         api_messages.append(m)
+
+    if len(st.session_state.messages) == 1:
+        # First turn: the retrieval block goes on the same combined message built above.
+        api_messages[0]["content"] += retrieved_block
+    else:
+        last = st.session_state.messages[-1]
+        api_messages.append({"role": last["role"], "content": last["content"] + retrieved_block})
 
     reply = stream_and_display(api_messages)
 
