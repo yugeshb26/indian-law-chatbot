@@ -4,9 +4,11 @@ import json
 import re
 import time
 import base64
+import math
 import os
 import urllib.parse
 import markdown as md_lib
+from collections import Counter
 from datetime import datetime
 
 from google import genai
@@ -109,18 +111,47 @@ _SEARCH_STOPWORDS = {
 
 
 @st.cache_resource
-def _search_corpus() -> list[str]:
+def _tokenized_corpus() -> list[Counter]:
+    """Whole-word counts per entry (NOT substring counts — see
+    _keyword_search_dataset for why that distinction matters), used for
+    TF-IDF scoring in the keyword-search fallback."""
     data = load_full_dataset()
     return [
-        (item.get("prompt", "") + " " + item.get("response", "")).lower()
+        Counter(re.findall(r"[a-z0-9]+", (item.get("prompt", "") + " " + item.get("response", "")).lower()))
         for item in data
     ]
 
 
-def _keyword_search_dataset(query: str, top_k: int, min_score: int = 4) -> list[dict]:
-    """Keyword-overlap fallback search across the FULL dataset, used only
-    when the semantic index isn't available (not yet built, or the
-    embedding API call failed for this request)."""
+@st.cache_resource
+def _document_frequency() -> dict[str, int]:
+    """How many entries each word appears in at least once — used to
+    down-weight words that are common across the corpus (e.g. the current
+    year, which appears in almost every recently-scraped entry's date and
+    is therefore nearly useless as a search signal) relative to rare,
+    specific ones (a name, a case number)."""
+    df: dict[str, int] = {}
+    for counts in _tokenized_corpus():
+        for word in counts:
+            df[word] = df.get(word, 0) + 1
+    return df
+
+
+def _keyword_search_dataset(query: str, top_k: int, min_score: float = 0.0) -> list[dict]:
+    """TF-IDF-weighted keyword search fallback across the FULL dataset,
+    used only when the semantic index isn't available (not yet built, or
+    the embedding API call failed for this request).
+
+    Two bugs in the old plain keyword-count version this replaces:
+    1. It counted `text.count(word)` as a raw SUBSTRING match, so e.g. the
+       query word "new" scored a hit inside "news" for every single entry
+       that happened to say "legal news" — nothing to do with relevance.
+    2. Every matched word counted equally, so a word like "2026" (present
+       in ~99% of entries via their date) scored the same as a genuinely
+       rare, specific word like a person's surname — burying the one
+       relevant entry under thousands of coincidental matches.
+    TF-IDF (log-dampened term frequency x inverse document frequency)
+    fixes both: whole-word counts only, and rare words dominate the score
+    while near-universal words contribute almost nothing."""
     words = [
         w for w in re.findall(r"[a-z0-9]+", query.lower())
         if len(w) > 2 and w not in _SEARCH_STOPWORDS
@@ -129,11 +160,15 @@ def _keyword_search_dataset(query: str, top_k: int, min_score: int = 4) -> list[
         return []
 
     data = load_full_dataset()
-    corpus = _search_corpus()
+    tokenized = _tokenized_corpus()
+    df = _document_frequency()
+    n_docs = len(tokenized)
+    idf = {w: math.log(n_docs / (1 + df.get(w, 0))) for w in set(words)}
+
     scored = []
-    for i, text in enumerate(corpus):
-        score = sum(text.count(w) for w in words)
-        if score >= min_score:
+    for i, counts in enumerate(tokenized):
+        score = sum(math.log(1 + counts.get(w, 0)) * idf[w] for w in words)
+        if score > min_score:
             scored.append((score, i))
     scored.sort(reverse=True)
     return [data[i] for _, i in scored[:top_k]]
