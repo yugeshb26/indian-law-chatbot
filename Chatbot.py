@@ -194,6 +194,71 @@ def search_dataset(query: str, top_k: int = 5) -> list[dict]:
     return _keyword_search_dataset(query, top_k=top_k)
 
 
+# ── Query router: live case-status short-circuit ────────────────────────────
+# "What's the current status / hearing date of case X" can never be reliably
+# answered from this dataset — it's always a lagging snapshot, refreshed once
+# a day at best, while a case's actual status can change same-day. No amount
+# of retrieval quality fixes that. So instead of letting the model try (and
+# either decline unhelpfully or, worse, guess), a cheap heuristic router
+# catches this class of question up front and returns a deterministic answer
+# with zero LLM calls — cheaper AND more honest.
+_CASE_STATUS_STRONG_PATTERNS = [
+    r"\bhearing date\b", r"\bnext hearing\b", r"\bcase status\b",
+    r"\bbail status\b", r"\bstay order status\b", r"\bcnr (number|no)\b",
+    r"\bdiary (number|no)\b", r"\bcurrent stage of\b", r"\bwhere does .* stand\b",
+    r"\bverdict (on|in)\b", r"\bjudgment date\b", r"\bcause list\b",
+]
+_CASE_STATUS_WEAK_PATTERNS = [
+    r"\blatest update\b", r"\bnew update\b", r"\bcurrent status\b",
+    r"\brecent update\b", r"\bcase update\b", r"\bwhat happened in\b",
+    r"\bany update on\b", r"\bstatus update\b",
+]
+_CASE_CONTEXT_WORDS = {
+    "case", "petition", "plea", "matter", "appeal", "suit", "fir",
+    "judgment", "hearing", "court", "order", "writ", "bail", "slp",
+}
+
+
+def _looks_like_live_case_status_query(query: str) -> bool:
+    q = query.lower()
+    if any(re.search(p, q) for p in _CASE_STATUS_STRONG_PATTERNS):
+        return True
+    if any(re.search(p, q) for p in _CASE_STATUS_WEAK_PATTERNS):
+        words = set(re.findall(r"[a-z]+", q))
+        if words & _CASE_CONTEXT_WORDS:
+            return True
+    return False
+
+
+def case_status_short_circuit_response(query: str) -> str:
+    """Deterministic, zero-LLM-cost reply for a live case-status question.
+    Still surfaces the closest matching dataset entry as a courtesy (e.g. a
+    'plea was filed' news item) via the existing search_dataset(), but is
+    explicit that it's a report, not a confirmed live status."""
+    hits = search_dataset(query, top_k=1)
+    context_line = ""
+    if hits:
+        h = hits[0]
+        context_line = (
+            f"\n\nThe closest related item in our data (a report, not a live status): "
+            f"*{h['prompt']}*\n> {h['response'][:400]}\n"
+        )
+    return (
+        "I can't reliably answer this from a static dataset — case status, hearing dates, and "
+        "interim orders change daily and need real-time official verification."
+        + context_line
+        + "\n\nTo check the actual current status:\n\n"
+        "- **eCourts Services** ([ecourts.gov.in](https://ecourts.gov.in)) or its mobile app — "
+        "search by party name, CNR number, or case/filing number.\n"
+        "- **High Court website** (e.g. Madras HC, Delhi HC) — \"Case Status\" or \"Cause List\", "
+        "searchable by party or advocate name.\n"
+        "- **Supreme Court of India** ([main.sci.gov.in](https://main.sci.gov.in)) — search by "
+        "diary number or party name for an SLP/appeal.\n\n"
+        "For anything you plan to act on, confirm with a certified copy of the order or a "
+        "practicing advocate."
+    )
+
+
 try:
     load_full_dataset()
 except FileNotFoundError:
@@ -713,37 +778,46 @@ if st.session_state.pending_response and st.session_state.messages:
     # just-submitted question and the loading bubble.
     scroll_to_bottom()
 
-    # Retrieve grounding for the CURRENT question from the full dataset (not
-    # just the static first-200 window) — this is what lets daily-scraped
-    # case-law/news updates actually reach the model, on every turn.
     current_question = st.session_state.messages[-1]["content"]
-    retrieved = search_dataset(current_question)
-    retrieved_block = ""
-    if retrieved:
-        retrieved_block = (
-            "\n\nRelevant dataset entries retrieved for this question "
-            "(may include recent updates — verify critical facts independently):\n"
-            + "\n".join(f"Q: {r['prompt']}\nA: {r['response'][:800]}" for r in retrieved)
-        )
 
-    # Build API messages from full history
-    api_messages = [
-        {
-            "role": "user",
-            "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"],
-        }
-    ]
-    for m in st.session_state.messages[1:-1]:
-        api_messages.append(m)
-
-    if len(st.session_state.messages) == 1:
-        # First turn: the retrieval block goes on the same combined message built above.
-        api_messages[0]["content"] += retrieved_block
+    if _looks_like_live_case_status_query(current_question):
+        # Live case-status/hearing-date questions can never be reliably
+        # answered from a dataset that's always a lagging snapshot — skip
+        # the LLM call entirely (cheaper, and no risk of the model ever
+        # presenting a stale report as a confirmed live status).
+        reply = case_status_short_circuit_response(current_question)
+        st.markdown(bot_bubble_html(reply), unsafe_allow_html=True)
     else:
-        last = st.session_state.messages[-1]
-        api_messages.append({"role": last["role"], "content": last["content"] + retrieved_block})
+        # Retrieve grounding for the CURRENT question from the full dataset
+        # (not just the static first-200 window) — this is what lets
+        # daily-scraped case-law/news updates actually reach the model.
+        retrieved = search_dataset(current_question)
+        retrieved_block = ""
+        if retrieved:
+            retrieved_block = (
+                "\n\nRelevant dataset entries retrieved for this question "
+                "(may include recent updates — verify critical facts independently):\n"
+                + "\n".join(f"Q: {r['prompt']}\nA: {r['response'][:800]}" for r in retrieved)
+            )
 
-    reply = stream_and_display(api_messages)
+        # Build API messages from full history
+        api_messages = [
+            {
+                "role": "user",
+                "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"],
+            }
+        ]
+        for m in st.session_state.messages[1:-1]:
+            api_messages.append(m)
+
+        if len(st.session_state.messages) == 1:
+            # First turn: the retrieval block goes on the same combined message built above.
+            api_messages[0]["content"] += retrieved_block
+        else:
+            last = st.session_state.messages[-1]
+            api_messages.append({"role": last["role"], "content": last["content"] + retrieved_block})
+
+        reply = stream_and_display(api_messages)
 
     if reply:
         st.session_state.messages.append({"role": "assistant", "content": reply})
