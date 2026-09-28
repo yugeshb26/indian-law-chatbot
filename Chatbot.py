@@ -9,12 +9,15 @@ import urllib.parse
 import markdown as md_lib
 from datetime import datetime
 
+from google import genai
+
 from db import init_db, create_chat, get_all_chats, get_chat, get_messages
 from db import append_message, update_chat_title, delete_chat
 from gemini_engine import stream_response, regenerate_response, generate_title, init_rotator
 from icons import icon
 from animations import inject_animations
 from chart_renderer import parse_chart_from_response, truncate_at_chart_tag, render_chart
+import rag_index
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # API keys: try environment variable first (Render), then Streamlit secrets
@@ -91,15 +94,11 @@ def load_full_dataset() -> list[dict]:
 
 
 @st.cache_resource
-def load_context() -> str:
-    # First 200 entries only: the foundational statutory content (BNS, BNSS,
-    # BSA, Constitution) built by build_dataset.py. This stays static as the
-    # always-on system-prompt grounding.
-    data = load_full_dataset()
-    return "\n".join(
-        f"Q: {item['prompt']}\nA: {item['response']}"
-        for item in data[:200]
-    )
+def _load_rag_index():
+    """Semantic-search index (Gemini embeddings) built by build_rag_index.py.
+    Returns (embeddings, meta), or (None, None) if it hasn't been built yet —
+    callers must fall back to keyword search in that case."""
+    return rag_index.load_index()
 
 
 _SEARCH_STOPWORDS = {
@@ -118,10 +117,10 @@ def _search_corpus() -> list[str]:
     ]
 
 
-def search_dataset(query: str, top_k: int = 3, min_score: int = 4) -> list[dict]:
-    """Keyword-overlap search across the FULL dataset (not just the static
-    first-200 window), so daily-appended case-law/news updates can actually
-    surface as grounding context for a given question."""
+def _keyword_search_dataset(query: str, top_k: int, min_score: int = 4) -> list[dict]:
+    """Keyword-overlap fallback search across the FULL dataset, used only
+    when the semantic index isn't available (not yet built, or the
+    embedding API call failed for this request)."""
     words = [
         w for w in re.findall(r"[a-z0-9]+", query.lower())
         if len(w) > 2 and w not in _SEARCH_STOPWORDS
@@ -140,8 +139,28 @@ def search_dataset(query: str, top_k: int = 3, min_score: int = 4) -> list[dict]
     return [data[i] for _, i in scored[:top_k]]
 
 
+def search_dataset(query: str, top_k: int = 5) -> list[dict]:
+    """Semantic search (Gemini embeddings) across the full dataset, so
+    paraphrased questions and daily-appended case-law/news updates all
+    surface as grounding — falls back to keyword overlap if the embedding
+    index isn't built yet or the embedding API call fails."""
+    embeddings, meta = _load_rag_index()
+    if embeddings is not None:
+        try:
+            key = rotator.get_key()
+            client = genai.Client(api_key=key)
+            results = rag_index.semantic_search(client, query, embeddings, meta, top_k=top_k)
+            rotator.mark_success(key)
+            if results:
+                return results
+        except Exception:
+            pass  # embedding call failed this turn — fall through to keyword search
+
+    return _keyword_search_dataset(query, top_k=top_k)
+
+
 try:
-    dataset_context = load_context()
+    load_full_dataset()
 except FileNotFoundError:
     st.error(f"File not found: `{DATASET_PATH}`")
     st.stop()
@@ -158,6 +177,18 @@ SYSTEM_PROMPT = (
     "6. Clarify constitutional provisions and fundamental rights\n"
     "7. Suggest consulting qualified legal professionals for specific advice\n\n"
     "Always provide complete, thorough responses. Do not cut off mid-sentence.\n\n"
+    "ACCURACY RULES (grounding is retrieved per-question below, not dumped here):\n"
+    "- Each user turn includes a 'Relevant dataset entries retrieved for this question' "
+    "block when the semantic search found a match. Treat those entries as your most "
+    "reliable, up-to-date source — prefer them over prior knowledge whenever they cover "
+    "the question, especially for anything recent (case law, amendments, news).\n"
+    "- For settled statutory law (e.g. well-known BNS/BNSS/BSA/Constitution provisions) "
+    "your own training knowledge is reliable even with no retrieved match — use it, but "
+    "say so isn't a substitute for a lawyer on anything consequential.\n"
+    "- If a question needs a specific section number, date, or figure and it is not in "
+    "the retrieved entries or your well-established knowledge, say plainly that you are "
+    "not certain rather than inventing a number — never fabricate a section, citation, or "
+    "figure to sound complete.\n\n"
     "CHART INSTRUCTIONS:\n"
     "When your response contains numerical comparisons, statistics, punishment tables, "
     "timelines, distributions, or any data that would be clearer as a chart, append a "
@@ -181,8 +212,7 @@ SYSTEM_PROMPT = (
     "- Add a chart ONLY when it genuinely clarifies numeric or comparative information.\n"
     "- Do NOT add a chart for simple factual/definition questions.\n"
     "- The chart block must be valid JSON — no trailing commas, no comments.\n"
-    "- Include at least 3 data points in a chart.\n\n"
-    "Dataset Context:\n" + dataset_context
+    "- Include at least 3 data points in a chart.\n"
 )
 
 # ── Markdown + bubble rendering helpers ─────────────────────────────────────

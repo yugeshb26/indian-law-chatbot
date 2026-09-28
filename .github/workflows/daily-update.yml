@@ -25,14 +25,22 @@ jobs:
       - name: Run daily RSS updater
         run: python daily_update_rss.py
 
-      - name: Commit and push if dataset changed
+      - name: Install dependencies for semantic-search index
+        run: pip install google-genai numpy
+
+      - name: Rebuild semantic-search index (only embeds new entries)
+        env:
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+        run: python build_rag_index.py
+
+      - name: Commit and push if dataset or index changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet Alpie-core_core_indian_law.json; then
+          if git diff --quiet -- Alpie-core_core_indian_law.json rag_embeddings.npy rag_meta.json; then
             echo "No changes to commit"
           else
-            git add Alpie-core_core_indian_law.json
-            git commit -m "Auto-update: daily RSS scrape ($(date -u +%Y-%m-%d))"
+            git add Alpie-core_core_indian_law.json rag_embeddings.npy rag_meta.json
+            git commit -m "Auto-update: daily RSS scrape + semantic index ($(date -u +%Y-%m-%d))"
             git push
           fi
