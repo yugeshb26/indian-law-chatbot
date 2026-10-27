@@ -20,6 +20,7 @@ from icons import icon
 from animations import inject_animations
 from chart_renderer import parse_chart_from_response, truncate_at_chart_tag, render_chart
 import rag_index
+import groq_engine
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # API keys: try environment variable first (Render), then Streamlit secrets
@@ -31,6 +32,21 @@ else:
 rotator = init_rotator(API_KEYS)
 API_KEY = API_KEYS[0]
 DATASET_PATH = "Alpie-core_core_indian_law.json"
+
+# Groq fallback (optional, resilience-only): used only when every Gemini key
+# is simultaneously rate-limited or quota-exhausted (gemini_engine.py handles
+# the actual failover). Leave GROQ_API_KEYS unset anywhere to run without a
+# fallback -- Gemini still works exactly as before. Wrapped defensively so a
+# missing secrets.toml in a deployment that only uses env vars (e.g. Render
+# without this var set) can never break app startup over an optional feature.
+try:
+    if os.environ.get("GROQ_API_KEYS"):
+        GROQ_API_KEYS = json.loads(os.environ["GROQ_API_KEYS"])
+    else:
+        GROQ_API_KEYS = list(st.secrets.get("GROQ_API_KEYS", []))
+except Exception:
+    GROQ_API_KEYS = []
+groq_engine.init_groq_rotator(GROQ_API_KEYS)
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(

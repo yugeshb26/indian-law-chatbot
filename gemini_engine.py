@@ -3,9 +3,10 @@ Gemini streaming engine with API key rotation, retry logic, and auto-continue.
 """
 
 import time
-import threading
 from google import genai
 from google.genai.types import GenerateContentConfig
+
+from key_rotator import KeyRotator
 
 # ── Constants ────────────────────────────────────────────────────────────────
 MODEL = "gemini-3.6-flash"
@@ -14,54 +15,6 @@ MAX_CONTINUE = 3     # max auto-continue iterations
 RETRY_DELAY = 1      # base delay
 MAX_OUTPUT_TOKENS = 4096
 CONTINUE_PROMPT = "Continue your response exactly where you left off. Do not repeat what you already said."
-
-
-# ── API Key Rotator ──────────────────────────────────────────────────────────
-
-class KeyRotator:
-    """Round-robin API key rotation with automatic failover on rate limit."""
-
-    def __init__(self, keys: list[str]):
-        self._keys = [k for k in keys if k and len(k) > 10]
-        if not self._keys:
-            raise ValueError("No valid API keys provided")
-        self._index = 0
-        self._lock = threading.Lock()
-        self._failed = {}  # key -> timestamp when it was rate-limited
-
-    @property
-    def count(self) -> int:
-        return len(self._keys)
-
-    def get_key(self) -> str:
-        """Get the next available key, skipping recently rate-limited ones."""
-        with self._lock:
-            now = time.time()
-            # Try each key once
-            for _ in range(len(self._keys)):
-                key = self._keys[self._index]
-                self._index = (self._index + 1) % len(self._keys)
-
-                # Skip if rate-limited in last 60 seconds
-                if key in self._failed and now - self._failed[key] < 60:
-                    continue
-                return key
-
-            # All keys rate-limited — return least recently failed and reset index past it
-            oldest_key = min(self._failed, key=self._failed.get, default=self._keys[0])
-            if oldest_key in self._keys:
-                self._index = (self._keys.index(oldest_key) + 1) % len(self._keys)
-            return oldest_key
-
-    def mark_failed(self, key: str):
-        """Mark a key as rate-limited."""
-        with self._lock:
-            self._failed[key] = time.time()
-
-    def mark_success(self, key: str):
-        """Clear rate-limit flag on success."""
-        with self._lock:
-            self._failed.pop(key, None)
 
 
 # ── Global rotator (set by Chatbot.py) ───────────────────────────────────────
@@ -192,11 +145,27 @@ def stream_response(api_key_unused: str, system_prompt: str, messages: list[dict
         return
 
     if last_error_is_quota:
+        # Resilience fallback: Gemini is still primary (and the only engine
+        # used for embeddings/semantic search) — Groq only ever kicks in
+        # here, when every Gemini key is simultaneously rate-limited or
+        # quota-exhausted. Local import avoids a circular import, since
+        # groq_engine imports KeyRotator from key_rotator, not from here.
+        import groq_engine
+        if groq_engine.is_configured():
+            print("[DEBUG] All Gemini keys exhausted — falling back to Groq")
+            try:
+                for chunk in groq_engine.stream_groq_response(messages):
+                    yield chunk
+                return
+            except Exception as groq_error:
+                print(f"[WARN] Groq fallback also failed: {str(groq_error)[:150]}")
+                # fall through to the Gemini quota error below
+
         raise RuntimeError(
             "API_QUOTA_EXHAUSTED: All Gemini API keys have hit their rate limit or daily quota. "
             "This could be a temporary traffic spike (wait 60s) or daily exhaustion."
         )
-    
+
     err_str = str(last_error) if last_error else "Unknown error"
     raise RuntimeError(f"API_FAILURE: Gemini API failed after {MAX_RETRIES} retries: {err_str[:200]}")
 
