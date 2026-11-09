@@ -34,6 +34,22 @@ def _get_rotator() -> KeyRotator:
     return _rotator
 
 
+# ── Client reuse ─────────────────────────────────────────────────────────────
+# A fresh genai.Client() per call discards its underlying HTTP connection pool,
+# forcing a brand-new TCP+TLS handshake to Google's API on every single request
+# (every retry, every continuation, every embedding call). Keeping one client
+# per key lets the SDK reuse keep-alive connections instead.
+_clients: dict[str, "genai.Client"] = {}
+
+
+def get_client(key: str) -> "genai.Client":
+    client = _clients.get(key)
+    if client is None:
+        client = genai.Client(api_key=key)
+        _clients[key] = client
+    return client
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _build_config():
@@ -67,8 +83,8 @@ def stream_response(api_key_unused: str, system_prompt: str, messages: list[dict
 
     while api_attempts < MAX_RETRIES:
         key = rotator.get_key()
-        client = genai.Client(api_key=key)
-        
+        client = get_client(key)
+
         print(f"[DEBUG] API Attempt {api_attempts+1} using key ending in ...{key[-4:]}")
 
         try:
@@ -197,7 +213,7 @@ def regenerate_response(api_key_unused: str, system_prompt: str, messages: list[
 
     for attempt in range(MAX_RETRIES):
         key = rotator.get_key()
-        client = genai.Client(api_key=key)
+        client = get_client(key)
         try:
             resp = client.models.generate_content(
                 model=MODEL,
@@ -222,7 +238,7 @@ def regenerate_response(api_key_unused: str, system_prompt: str, messages: list[
 def generate_title(api_key_unused: str, question: str) -> str:
     rotator = _get_rotator()
     key = rotator.get_key()
-    client = genai.Client(api_key=key)
+    client = get_client(key)
     try:
         resp = client.models.generate_content(
             model=MODEL,

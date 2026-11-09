@@ -11,11 +11,9 @@ import markdown as md_lib
 from collections import Counter
 from datetime import datetime
 
-from google import genai
-
 from db import init_db, create_chat, get_all_chats, get_chat, get_messages
 from db import append_message, update_chat_title, delete_chat
-from gemini_engine import stream_response, regenerate_response, generate_title, init_rotator
+from gemini_engine import stream_response, regenerate_response, generate_title, init_rotator, get_client
 from icons import icon
 from animations import inject_animations
 from chart_renderer import parse_chart_from_response, truncate_at_chart_tag, render_chart
@@ -32,6 +30,12 @@ else:
 rotator = init_rotator(API_KEYS)
 API_KEY = API_KEYS[0]
 DATASET_PATH = "Alpie-core_core_indian_law.json"
+
+# Cap on prior messages (excluding the first turn and the current question)
+# resent to the API each turn -- without this, a long-running chat resends
+# its entire transcript from scratch on every single call, growing token
+# cost and latency linearly with conversation length.
+MAX_MIDDLE_HISTORY = 20
 
 # Groq fallback (optional, resilience-only): used only when every Gemini key
 # is simultaneously rate-limited or quota-exhausted (gemini_engine.py handles
@@ -199,7 +203,7 @@ def search_dataset(query: str, top_k: int = 5) -> list[dict]:
     if embeddings is not None:
         try:
             key = rotator.get_key()
-            client = genai.Client(api_key=key)
+            client = get_client(key)
             results = rag_index.semantic_search(client, query, embeddings, meta, top_k=top_k)
             rotator.mark_success(key)
             if results:
@@ -816,14 +820,22 @@ if st.session_state.pending_response and st.session_state.messages:
                 + "\n".join(f"Q: {r['prompt']}\nA: {r['response'][:800]}" for r in retrieved)
             )
 
-        # Build API messages from full history
+        # Build API messages from history, capped so a long-running chat
+        # doesn't resend an ever-growing transcript (and its token cost) on
+        # every single turn. The first message always stays (it carries the
+        # system prompt); trim from the front of the middle section two at a
+        # time so it keeps starting on the "assistant" turn that naturally
+        # follows the first message, preserving correct role alternation.
         api_messages = [
             {
                 "role": "user",
                 "content": SYSTEM_PROMPT + "\n\nUser: " + st.session_state.messages[0]["content"],
             }
         ]
-        for m in st.session_state.messages[1:-1]:
+        middle_history = st.session_state.messages[1:-1]
+        while len(middle_history) > MAX_MIDDLE_HISTORY:
+            middle_history = middle_history[2:]
+        for m in middle_history:
             api_messages.append(m)
 
         if len(st.session_state.messages) == 1:

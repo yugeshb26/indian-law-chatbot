@@ -23,6 +23,19 @@ MAX_OUTPUT_TOKENS = 4096
 
 _rotator: KeyRotator | None = None
 
+# Reuse one Groq client per key instead of constructing a fresh one (and a
+# fresh HTTP connection) on every single call -- same rationale as
+# gemini_engine.get_client().
+_clients: dict[str, "Groq"] = {}
+
+
+def _get_client(key: str) -> "Groq":
+    client = _clients.get(key)
+    if client is None:
+        client = Groq(api_key=key)
+        _clients[key] = client
+    return client
+
 
 def init_groq_rotator(keys: list[str]):
     """Initialize the Groq key rotator. Safe to call with an empty/missing
@@ -69,7 +82,7 @@ def stream_groq_response(messages: list[dict]):
 
     while api_attempts < MAX_RETRIES:
         key = _rotator.get_key()
-        client = Groq(api_key=key)
+        client = _get_client(key)
         print(f"[DEBUG] Groq fallback attempt {api_attempts + 1} using key ending in ...{key[-4:]}")
 
         try:
